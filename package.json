@@ -34,5 +34,6 @@
     "type": "git",
     "url": "git+https://github.com/sirmeili/3d-mockup-viewer.git"
   },
+  "author": "Frank M Thompson",
   "license": "MIT"
 }
