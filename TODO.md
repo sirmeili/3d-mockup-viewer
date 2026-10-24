@@ -39,3 +39,14 @@ Today Arrange edits groups, explode offsets, see-inside behaviour, materials and
 - **Probably also:** `finishes` (add, rename, recolour, remove swatches), `views` and `defaultView` (save the current camera as a named custom view), `units`.
 - Edits are remembered per model in the browser like Arrange edits, and cleared by Reset.
 - Likely UI: an "Edit details" toggle on the spec panel that turns sections into inline fields, matching Arrange's labelled-field style.
+
+## 4. Save the manifest (not just copy it)
+
+Give the viewer a **Save** button beside **Copy manifest**, using the best method available where the page is running. Feature-detect, and fall back to the next method.
+
+- **Self-hosted with `mockup serve --writable`:** the CLI's server accepts `PUT` for `manifest.json` (and only files under the served folder). Save writes straight back to the project on disk, ready to commit. Off unless the flag is given.
+- **Embedded in a host app:** Save sends the manifest to the host (the embedding API's `change` / a `save` message), and the host stores it (e.g. the tracker writing to the project). Depends on item 1.
+- **Plain browser, self-hosted:** in Chromium, the File System Access API (`showSaveFilePicker`) saves `manifest.json` straight to a chosen file and remembers the handle for later saves. Elsewhere, a normal download.
+- **Inside Claude artifacts:** downloads are blocked there. Options are artifact storage (a "Saved mockups" list holding manifests, and optionally the part files, reopenable on any device; check which storage capability the account has) or keep Copy as the fallback.
+- Show what happened ("Saved to manifest.json", "Downloaded", "Copied") and keep the in-browser edit memory in sync after a save.
+- **Tests:** a browser test for the `--writable` round trip (edit → Save → file on disk changed), and that Save is hidden or falls back where unsupported.
