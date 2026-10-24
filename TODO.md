@@ -50,3 +50,25 @@ Give the viewer a **Save** button beside **Copy manifest**, using the best metho
 - **Inside Claude artifacts:** downloads are blocked there. Options are artifact storage (a "Saved mockups" list holding manifests, and optionally the part files, reopenable on any device; check which storage capability the account has) or keep Copy as the fallback.
 - Show what happened ("Saved to manifest.json", "Downloaded", "Copied") and keep the in-browser edit memory in sync after a save.
 - **Tests:** a browser test for the `--writable` round trip (edit → Save → file on disk changed), and that Save is hidden or falls back where unsupported.
+
+## 5. Manifest editor (full-screen dialog)
+
+A **Manifest editor** button opens a large dialog that edits everything a manifest can hold in one place. Arrange stays as it is, as the quick inline tool. The editor deliberately duplicates its features, so people can work in either.
+
+- **Layout:** a large modal (full screen on phones) with a section list down the side (tabs on narrow screens) and the editing area beside it. The 3D view stays live behind or beside it, so changes are visible as you make them.
+- **Every section opens with a short description of what it controls and how to use it,** in plain language, plus a "what you'll see" note where it helps. For example: "Groups are parts that move together. Set how far each group moves in the Exploded view…"
+- **Sections, covering every manifest field:**
+  - **Page:** `name`, `subtitle`, `eyebrow`, `units`, `up` axis.
+  - **Parts:** id, name, file or `scad` (`file` + `defines`), material (presets plus colour picker), group.
+  - **Groups:** label, explode X/Y/Z, see-inside behaviour. Create, rename, delete (members move to their own group).
+  - **Views:** stock views on/off and their order. Custom views by name and direction, with "Use current camera" to capture one. Default view.
+  - **Finishes:** swatches with name and colour. Add, remove, set the default.
+  - **Spec sheet:** sections, each with a title and a type (table rows / bullet items / paragraph). Rows, items and sections all editable.
+- **Drag and drop to reorder** everything that has an order: parts, groups, views, finishes, spec sections, rows and items. Parts can also be dragged between groups. Every drag has a keyboard alternative (move up/down buttons or arrow keys) and works with touch.
+- **Ease of use:** labelled fields everywhere (same style as Arrange), inline validation (duplicate ids, missing files, bad colours) with plain explanations, Undo/Redo, and a "Changes" count with Reset per section and overall.
+- **Raw JSON tab** for power users: view and edit the manifest as text, with validation before applying.
+- **Footer actions:** Apply / Close, Copy manifest, and Save once item 4 exists. The embedding API's `change` event (item 1) fires from editor changes too.
+- **Same data as Arrange:** both edit one in-memory manifest and share the per-model edit memory in the browser, so switching between them never loses work.
+- **Tests:** browser tests that open the editor at desktop and phone widths in both themes, reorder by drag and by keyboard, edit a spec section, and confirm Copy/Save output matches. Also an accessibility pass: focus trap in the dialog, Esc to close, labelled controls.
+
+Supersedes the UI part of item 3 (spec and page-text editing happen here). Item 3's data rules still apply.
