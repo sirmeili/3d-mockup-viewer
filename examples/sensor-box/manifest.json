@@ -1,0 +1,200 @@
+{
+  "name": "ESP32 Sensor Box",
+  "subtitle": "Sample assembly. Ethernet on the front, USB-C on the left, three light pipes through the lid.",
+  "up": "z",
+  "parts": [
+    {
+      "id": "base",
+      "name": "Case base",
+      "group": "base",
+      "material": "finish",
+      "scad": {
+        "file": "sensor_box.scad",
+        "defines": {
+          "part": "base"
+        }
+      }
+    },
+    {
+      "id": "lid",
+      "name": "Lid",
+      "group": "lid",
+      "material": "finish",
+      "scad": {
+        "file": "sensor_box.scad",
+        "defines": {
+          "part": "lid"
+        }
+      }
+    },
+    {
+      "id": "pipes",
+      "name": "Light pipes",
+      "group": "lid",
+      "material": "clear",
+      "scad": {
+        "file": "sensor_box.scad",
+        "defines": {
+          "part": "pipes"
+        }
+      }
+    },
+    {
+      "id": "pcb",
+      "name": "ESP32 board",
+      "group": "board",
+      "material": "pcb-green",
+      "scad": {
+        "file": "sensor_box.scad",
+        "defines": {
+          "part": "pcb"
+        }
+      }
+    },
+    {
+      "id": "module",
+      "name": "ESP32 module",
+      "group": "board",
+      "material": "metal",
+      "scad": {
+        "file": "sensor_box.scad",
+        "defines": {
+          "part": "module"
+        }
+      }
+    },
+    {
+      "id": "rj45",
+      "name": "RJ45 jack",
+      "group": "board",
+      "material": "metal",
+      "scad": {
+        "file": "sensor_box.scad",
+        "defines": {
+          "part": "rj45"
+        }
+      }
+    },
+    {
+      "id": "usbc",
+      "name": "USB-C port",
+      "group": "board",
+      "material": "metal",
+      "scad": {
+        "file": "sensor_box.scad",
+        "defines": {
+          "part": "usbc"
+        }
+      }
+    },
+    {
+      "id": "header",
+      "name": "UEXT header",
+      "group": "board",
+      "material": "plastic-black",
+      "scad": {
+        "file": "sensor_box.scad",
+        "defines": {
+          "part": "header"
+        }
+      }
+    },
+    {
+      "id": "leds",
+      "name": "Status LEDs",
+      "group": "board",
+      "material": "led",
+      "scad": {
+        "file": "sensor_box.scad",
+        "defines": {
+          "part": "leds"
+        }
+      }
+    }
+  ],
+  "groups": {
+    "base": {
+      "label": "Case base",
+      "explode": [
+        0,
+        0,
+        0
+      ]
+    },
+    "board": {
+      "label": "Board",
+      "explode": [
+        0,
+        0,
+        18
+      ]
+    },
+    "lid": {
+      "label": "Lid",
+      "explode": [
+        0,
+        0,
+        44
+      ],
+      "inside": "hide"
+    }
+  },
+  "views": [
+    "front",
+    "rear",
+    "left",
+    "top",
+    "iso"
+  ],
+  "defaultView": "iso",
+  "finishes": [
+    {
+      "name": "Graphite",
+      "color": "#3a3e41"
+    },
+    {
+      "name": "Bone white",
+      "color": "#e4e1d8"
+    },
+    {
+      "name": "Slate blue",
+      "color": "#4d6b8c"
+    }
+  ],
+  "spec": [
+    {
+      "title": "Size and fit",
+      "rows": [
+        [
+          "Outside",
+          "70 × 50 × 22 mm"
+        ],
+        [
+          "Board",
+          "60 × 40 mm, 4 × M2.5"
+        ],
+        [
+          "Standoffs",
+          "4 mm"
+        ],
+        [
+          "Walls",
+          "2 mm"
+        ]
+      ]
+    },
+    {
+      "title": "Openings",
+      "items": [
+        "RJ45, front (17 × 14.5 mm)",
+        "USB-C, left side",
+        "Seven vent slots, rear",
+        "Three 3.2 mm light-pipe holes in the lid"
+      ]
+    },
+    {
+      "title": "Printing",
+      "text": "Print the base upright and the lid upside down. No supports needed. The light pipes are trimmed to length after test fitting."
+    }
+  ]
+}

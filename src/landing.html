@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3D Mockup Viewer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Public+Sans:wght@400;500&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+:root { --bg: #f1f3f2; --surface: #fff; --fg: #1b2122; --muted: #5d6869; --line: #d4dad9; --accent: #1f6f8b; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --bg: #141819; --surface: #1c2122; --fg: #e4e9e8; --muted: #9aa6a7; --line: #2d3537; --accent: #5fb3cf; color-scheme: dark; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 "Public Sans", system-ui, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 48px max(16px, env(safe-area-inset-left, 0px)) 64px; display: grid; gap: 22px; }
+.eyebrow { font: 11.5px "JetBrains Mono", ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1 { font: 700 clamp(28px, 5vw, 40px)/1.1 Archivo, "Helvetica Neue", Arial, sans-serif; margin: 4px 0 0; }
+p { margin: 0; max-width: 62ch; }
+.links { display: grid; gap: 10px; }
+a.card { display: grid; gap: 2px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: inherit; text-decoration: none; }
+a.card:hover, a.card:focus-visible { border-color: var(--accent); outline: none; }
+a.card b { font: 600 16px Archivo, "Helvetica Neue", Arial, sans-serif; color: var(--accent); }
+a.card span { color: var(--muted); font-size: 14px; }
+code { font: 13px "JetBrains Mono", ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <p class="eyebrow">Version {{version}}</p>
+    <h1>3D Mockup Viewer</h1>
+  </div>
+  <p>Interactive mockups for 3D-printed enclosures: assembled, exploded, see-inside and section views, from STL, 3MF, GLB or OpenSCAD files.</p>
+  <div class="links">
+    <a class="card" href="demo.html"><b>Viewer</b><span>Sample model. Drop in your own STL, 3MF or GLB parts.</span></a>
+    <a class="card" href="openscad/index.html"><b>OpenSCAD edition</b><span>Load .scad files, edit their values and re-render in the browser.</span></a>
+    <a class="card" href="viewer.html?manifest=examples/sensor-box/manifest.json"><b>Load from a URL</b><span><code>viewer.html?manifest=…</code> loads a manifest and its parts from the same site.</span></a>
+  </div>
+</main>
+</body>
+</html>

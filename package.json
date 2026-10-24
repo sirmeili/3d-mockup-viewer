@@ -1,0 +1,38 @@
+{
+  "name": "3d-mockup-viewer",
+  "version": "0.1.0",
+  "description": "Interactive 3D mockups for printable enclosures: assembled, exploded, see-inside and section views from STL, 3MF, GLB or OpenSCAD.",
+  "type": "module",
+  "bin": {
+    "mockup": "cli/mockup.js"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "cli/",
+    "lib/",
+    "src/",
+    "vendor/",
+    "scripts/",
+    "dist/"
+  ],
+  "scripts": {
+    "build": "node scripts/build-dist.js",
+    "prepare": "node scripts/build-dist.js --if-missing",
+    "test": "node --test test/*.test.js",
+    "serve": "node cli/mockup.js serve dist"
+  },
+  "dependencies": {
+    "openscad-wasm-prebuilt": "1.2.0"
+  },
+  "engines": {
+    "node": ">=20.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sirmeili/3d-mockup-viewer.git"
+  },
+  "license": "UNLICENSED"
+}

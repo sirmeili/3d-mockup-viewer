@@ -1,0 +1,442 @@
+<style>
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { filter: brightness(1.08); border-color: var(--accent); }
+.btn[disabled] { opacity: .55; cursor: progress; }
+.scad { display: grid; gap: 14px; }
+.scad-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 10px 18px; }
+.scad-head > div { min-width: 0; }
+.scad-head h2 { margin: 0 0 2px; }
+.scad-meta { margin: 0; color: var(--muted); font-size: 13.5px; }
+.scad-meta code { font-family: var(--font-mono); font-size: 12.5px; color: var(--fg); }
+.scad-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.params { display: grid; gap: 14px; }
+.pbox > summary, .psec > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; border-radius: 6px; }
+.pbox > summary::-webkit-details-marker, .psec > summary::-webkit-details-marker { display: none; }
+.pbox > summary::before, .psec > summary::before {
+  content: ""; width: 7px; height: 7px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor;
+  transform: rotate(-45deg); transition: transform .15s ease; flex: none; margin: 0 3px 0 1px;
+}
+.pbox[open] > summary::before, .psec[open] > summary::before { transform: rotate(45deg); }
+.pbox > summary { font-family: var(--font-display); font-weight: 600; font-size: 14.5px; padding: 4px 0; }
+.pbox > summary .pcount { font: 400 12.5px var(--font-body); color: var(--muted); }
+.pbox > summary .pcount b { color: var(--accent); font-weight: 600; }
+.pbox[open] > .params { margin-top: 10px; }
+.psec { min-width: 0; }
+.psec > summary { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 2px 0; }
+.psec > summary:hover, .pbox > summary:hover { color: var(--fg); }
+.psec[open] > .pgrid { margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) { .pbox > summary::before, .psec > summary::before { transition: none; } }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px 18px; }
+.param { display: grid; gap: 4px; min-width: 0; align-content: start; }
+.param > label { font-size: 13.5px; display: flex; justify-content: space-between; gap: 8px; }
+.param > label code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.param small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.param input[type="number"], .param input[type="text"], .param select {
+  font: 400 13.5px/1.2 var(--font-mono); color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; width: 100%; min-width: 0;
+}
+.param.changed input, .param.changed select { border-color: var(--accent); }
+.param .chk { display: inline-flex; align-items: center; gap: 8px; font: 400 13.5px var(--font-mono); padding: 6px 0; }
+.param .chk input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.params-empty { margin: 0; color: var(--muted); font-size: 13.5px; }
+.scad details summary { cursor: pointer; color: var(--muted); font-size: 13.5px; }
+.scad pre {
+  margin: 8px 0 0; max-height: 260px; overflow: auto; font: 400 12px/1.5 var(--font-mono);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+</style>
+
+<section class="panel scad" id="scadPanel" hidden aria-label="OpenSCAD source and parameters">
+  <div class="scad-head">
+    <div>
+      <h2>OpenSCAD</h2>
+      <p class="scad-meta" id="scadMeta"></p>
+    </div>
+    <div class="scad-actions">
+      <button class="btn" type="button" id="scadReset">Reset values</button>
+      <button class="btn primary" type="button" id="scadRender">Render</button>
+    </div>
+  </div>
+  <details class="pbox" id="scadParamsBox" open>
+    <summary>Parameters <span class="pcount" id="scadCount"></span></summary>
+    <div class="params" id="scadParams"></div>
+  </details>
+  <details id="scadLogBox"><summary>OpenSCAD output</summary><pre id="scadLog">No renders yet.</pre></details>
+</section>
+
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const panel = $('scadPanel');
+  const lower = document.querySelector('.lower');
+  if (lower) lower.parentNode.insertBefore(panel, lower);
+
+  // OpenSCAD edition labels
+  document.title = 'OpenSCAD Mockup Viewer';
+  const dropTxt = document.querySelector('#drop small');
+  if (dropTxt) dropTxt.textContent = '.scad files (plus any files they include or import), or STL, 3MF and GLB parts';
+
+  const S = { sources: {}, main: null, manifest: null, partVar: null, partValues: [], params: [], rendering: false, rendered: false };
+
+  // ---------- parsing ----------
+  const NUM = /^-?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
+  function parseParams(src) {
+    const out = []; let section = null, hidden = false, prev = null;
+    for (const line of src.split(/\r?\n/)) {
+      const t = line.trim();
+      if (/^(module|function)\b/.test(t)) break;
+      const sec = /^\/\*\s*\[([^\]]+)\]\s*\*\/$/.exec(t);
+      if (sec) { section = sec[1].trim(); hidden = /^hidden$/i.test(section); prev = null; continue; }
+      if (t.startsWith('//')) { prev = t.replace(/^\/\/+\s*/, ''); continue; }
+      if (/^\s/.test(line) || !/^[A-Za-z_$][\w$]*\s*=/.test(t)) { prev = null; continue; }
+      const ci = t.indexOf('//');
+      const code = ci >= 0 ? t.slice(0, ci) : t;
+      const hint = ci >= 0 ? t.slice(ci + 2).trim() : '';
+      const segs = code.split(';').map((x) => x.trim()).filter(Boolean);
+      const found = [];
+      let ok = true;
+      for (const seg of segs) {
+        const m = /^([A-Za-z_$][\w$]*)\s*=\s*(.+)$/.exec(seg);
+        if (!m) { ok = false; break; }
+        const raw = m[2].trim();
+        let type = null, value = null;
+        if (NUM.test(raw)) { type = 'number'; value = parseFloat(raw); }
+        else if (raw === 'true' || raw === 'false') { type = 'bool'; value = raw === 'true'; }
+        else if (/^"([^"\\]|\\.)*"$/.test(raw)) { type = 'string'; value = JSON.parse(raw); }
+        if (type) found.push({ name: m[1], type, value });
+      }
+      if (!ok || hidden) { prev = null; continue; }
+      found.forEach((f, i) => {
+        const p = { name: f.name, type: f.type, value: f.value, def: f.value, section, desc: found.length === 1 ? prev : null };
+        const h = found.length === 1 ? hint : '';
+        const rng = /^\[\s*(-?[\d.]+)\s*:\s*(-?[\d.]+)\s*(?::\s*(-?[\d.]+))?\s*\]$/.exec(h);
+        if (rng && p.type === 'number') {
+          if (rng[3] !== undefined) { p.min = +rng[1]; p.step = +rng[2]; p.max = +rng[3]; } else { p.min = +rng[1]; p.max = +rng[2]; }
+        } else if (/^\[.+\]$/.test(h) && p.type !== 'bool') {
+          p.options = h.slice(1, -1).split(',').map((x) => x.trim()).filter(Boolean).map((x) => {
+            const [v, lab] = x.split(':').map((y) => y.trim().replace(/^"|"$/g, ''));
+            return { value: p.type === 'number' ? parseFloat(v) : v, label: lab || v };
+          });
+        } else if (h && !p.desc) p.desc = h;
+        if (found.length > 1 && hint && i === 0) p.desc = hint;
+        if (p.type === 'number' && p.step === undefined) p.step = Number.isInteger(p.value) ? 1 : 0.1;
+        out.push(p);
+      });
+      prev = null;
+    }
+    return out;
+  }
+  function detectPartVar(src) {
+    const re = /\b([A-Za-z_]\w*)\s*==\s*"([^"]+)"/g; const seen = {}; let m;
+    while ((m = re.exec(src))) {
+      const [, v, val] = m;
+      if (/^(all|assembly|none|everything)$/i.test(val)) continue;
+      (seen[v] = seen[v] || []).includes(val) || seen[v].push(val);
+    }
+    let best = null;
+    for (const v in seen) if (seen[v].length >= 2 && (!best || seen[v].length > seen[best].length)) best = v;
+    return best ? { name: best, values: seen[best] } : null;
+  }
+  function refs(src) {
+    const out = []; const re = /\b(?:include|use)\s*<([^>]+)>|\bimport\s*\(\s*(?:file\s*=\s*)?"([^"]+)"/g; let m;
+    while ((m = re.exec(src))) out.push(m[1] || m[2]);
+    return out;
+  }
+  const base = (p) => p.split('/').pop();
+  const srcPath = (f) => (S.sources[f] !== undefined ? f : base(f));
+  function pickMain(sources) {
+    const scads = Object.keys(sources).filter((n) => /\.scad$/i.test(n));
+    const referenced = new Set();
+    scads.forEach((n) => refs(text(sources[n])).forEach((r) => referenced.add(base(r))));
+    const roots = scads.filter((n) => !referenced.has(base(n)));
+    const pool = roots.length ? roots : scads;
+    return pool.find((n) => detectPartVar(text(sources[n]))) || pool[0];
+  }
+  function text(v) { return typeof v === 'string' ? v : new TextDecoder().decode(v); }
+  // make every referenced path resolve to a dropped file of the same name
+  function withAliases(sources) {
+    const out = Object.assign({}, sources);
+    Object.keys(sources).forEach((n) => {
+      if (!/\.scad$/i.test(n)) return;
+      refs(text(sources[n])).forEach((r) => { const b = base(r); if (r !== b && sources[b] !== undefined && out[r] === undefined) out[r] = sources[b]; });
+    });
+    return out;
+  }
+  const pretty = (s) => s.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().replace(/^./, (c) => c.toUpperCase());
+  const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'part';
+  function literal(p, v) { return p.type === 'string' ? JSON.stringify(String(v)) : p.type === 'bool' ? (v ? 'true' : 'false') : String(v); }
+
+  // ---------- params panel ----------
+  function renderPanel() {
+    panel.hidden = false;
+    const meta = $('scadMeta'); meta.textContent = '';
+    const code = (t) => { const c = document.createElement('code'); c.textContent = t; return c; };
+    meta.append(code(S.main));
+    if (S.manifest && S.manifest.parts && S.manifest.parts.some((p) => p.scad)) meta.append(' · ' + S.manifest.parts.length + ' parts from the manifest');
+    else if (S.partVar) { meta.append(' · parts from '); meta.append(code(S.partVar)); meta.append(': ' + S.partValues.join(', ')); }
+    else meta.append(' · renders as one part (no part selector found)');
+    const host = $('scadParams'); host.textContent = '';
+    const params = S.params.filter((p) => p.name !== S.partVar);
+    const box = $('scadParamsBox');
+    box.open = remembered('all', true);
+    box.ontoggle = () => remember('all', box.open);
+    updateCount();
+    if (!params.length) {
+      const e = document.createElement('p'); e.className = 'params-empty';
+      e.textContent = 'No editable top-level values found. Plain number, true/false and "text" assignments above the first module become editable here.';
+      host.appendChild(e); return;
+    }
+    const sections = new Map();
+    params.forEach((p) => { const k = p.section || 'Parameters'; if (!sections.has(k)) sections.set(k, []); sections.get(k).push(p); });
+    sections.forEach((list, title) => {
+      const sec = document.createElement('details'); sec.className = 'psec';
+      sec.open = remembered('sec:' + title, true);
+      sec.addEventListener('toggle', () => remember('sec:' + title, sec.open));
+      const sm = document.createElement('summary'); sm.textContent = title + ' (' + list.length + ')';
+      const grid = document.createElement('div'); grid.className = 'pgrid';
+      list.forEach((p) => grid.appendChild(paramControl(p)));
+      sec.append(sm, grid); host.appendChild(sec);
+    });
+  }
+  function updateCount() {
+    const params = S.params.filter((p) => p.name !== S.partVar);
+    const changed = params.filter((p) => p.value !== p.def).length;
+    const el = $('scadCount'); el.textContent = '';
+    el.append(params.length + (params.length === 1 ? ' value' : ' values'));
+    if (changed) { el.append(' · '); const b = document.createElement('b'); b.textContent = changed + ' changed'; el.append(b); }
+  }
+  // per-viewer memory of which sections are open
+  function key(k) { return 'scadOpen:' + (S.main || '') + ':' + k; }
+  function remembered(k, dflt) { try { const v = localStorage.getItem(key(k)); return v === null ? dflt : v === '1'; } catch (e) { return dflt; } }
+  function remember(k, open) { try { localStorage.setItem(key(k), open ? '1' : '0'); } catch (e) { /* storage unavailable */ } }
+  function paramControl(p) {
+    const wrap = document.createElement('div'); wrap.className = 'param';
+    const id = 'sp-' + p.name.replace(/\$/g, 'S');
+    const lab = document.createElement('label'); lab.htmlFor = id;
+    const SPECIAL = { '$fn': 'Smoothness', '$fa': 'Min. facet angle', '$fs': 'Min. facet size' };
+    const nm = document.createElement('span'); nm.textContent = SPECIAL[p.name] || pretty(p.name.replace(/^\$/, ''));
+    lab.append(nm);
+    if (nm.textContent.toLowerCase().replace(/ /g, '_') !== p.name.toLowerCase()) { const raw = document.createElement('code'); raw.textContent = p.name; lab.append(raw); }
+    let input;
+    const mark = () => { wrap.classList.toggle('changed', p.value !== p.def); updateCount(); };
+    if (p.type === 'bool') {
+      const box = document.createElement('label'); box.className = 'chk';
+      input = document.createElement('input'); input.type = 'checkbox'; input.id = id; input.checked = p.value;
+      input.addEventListener('change', () => { p.value = input.checked; mark(); });
+      box.append(input, document.createTextNode(String(p.def ? 'on by default' : 'off by default')));
+      wrap.append(lab, box);
+    } else if (p.options) {
+      input = document.createElement('select'); input.id = id;
+      p.options.forEach((o) => { const op = document.createElement('option'); op.value = String(o.value); op.textContent = o.label; input.appendChild(op); });
+      input.value = String(p.value);
+      input.addEventListener('change', () => { p.value = p.type === 'number' ? parseFloat(input.value) : input.value; mark(); });
+      wrap.append(lab, input);
+    } else {
+      input = document.createElement('input'); input.id = id;
+      input.type = p.type === 'number' ? 'number' : 'text';
+      if (p.type === 'number') { input.step = String(p.step); if (p.min !== undefined) input.min = String(p.min); if (p.max !== undefined) input.max = String(p.max); input.inputMode = 'decimal'; }
+      input.value = String(p.value);
+      input.addEventListener('input', () => {
+        if (p.type === 'number') { const v = parseFloat(input.value); if (!Number.isNaN(v)) p.value = v; } else p.value = input.value;
+        mark();
+      });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') render(); });
+      wrap.append(lab, input);
+    }
+    if (p.desc) { const s = document.createElement('small'); s.textContent = p.desc; wrap.appendChild(s); }
+    mark();
+    return wrap;
+  }
+  $('scadReset').addEventListener('click', () => { S.params.forEach((p) => { p.value = p.def; }); renderPanel(); });
+  $('scadRender').addEventListener('click', () => render());
+
+  // ---------- engine ----------
+  const POOL = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
+  let workers = null, direct = null;
+  function startWorker() {
+    return new Promise((resolve, reject) => {
+      let w;
+      try { w = new Worker('scad-worker.js', { type: 'module' }); } catch (e) { reject(e); return; }
+      const timer = setTimeout(() => { w.terminate(); reject(new Error('worker timed out')); }, 90000);
+      w.onerror = (e) => { clearTimeout(timer); w.terminate(); reject(new Error(e.message || 'worker failed to start')); };
+      w.onmessage = (e) => { if (e.data && e.data.ready) { clearTimeout(timer); w.onerror = null; resolve(w); } };
+    });
+  }
+  async function engine() {
+    if (workers || direct) return;
+    try {
+      const first = await startWorker();
+      workers = [first];
+      for (let i = 1; i < POOL; i++) startWorker().then((w) => workers.push(w)).catch(() => {});
+    } catch (e) {
+      const mod = await import(new URL('scad-worker.js', location.href).href);
+      direct = mod.renderJob;
+    }
+  }
+  let seq = 0;
+  function runOn(w, job) {
+    return new Promise((resolve) => {
+      const id = ++seq;
+      const onMsg = (e) => { if (e.data && e.data.id === id) { w.removeEventListener('message', onMsg); resolve(e.data); } };
+      w.addEventListener('message', onMsg);
+      w.postMessage({ id, job });
+    });
+  }
+  async function runAll(jobs, onDone) {
+    jobs = jobs.map((j) => Object.assign({}, j, { job: rebaseJob(j.job) }));
+    if (direct) { for (const j of jobs) onDone(j, await direct(j.job, location.href)); return; }
+    let next = 0;
+    const lane = async () => {
+      while (next < jobs.length) {
+        const j = jobs[next++];
+        const w = workers[(next - 1) % workers.length];
+        onDone(j, await runOn(w, j.job));
+      }
+    };
+    await Promise.all(workers.map(lane));
+  }
+
+  // ---------- render ----------
+  // the worker writes files under /work; keys like "../hardware/case.scad" are rebased so relative includes still resolve
+  function normalizePath(p) {
+    const out = [];
+    for (const seg of p.split('/')) { if (!seg || seg === '.') continue; if (seg === '..' && out.length && out[out.length - 1] !== '..') out.pop(); else out.push(seg); }
+    return out.join('/');
+  }
+  function rebaseJob(job) {
+    const keys = Object.keys(job.files).map(normalizePath).concat([normalizePath(job.main)]);
+    const depth = Math.max(0, ...keys.map((k) => (k.match(/^(\.\.\/)+/) || [''])[0].length / 3));
+    if (!depth) return job;
+    const pre = 'w/'.repeat(depth);
+    const files = {};
+    Object.entries(job.files).forEach(([k, v]) => { files[normalizePath(pre + normalizePath(k))] = v; });
+    return Object.assign({}, job, { files, main: normalizePath(pre + normalizePath(job.main)) });
+  }
+  function overrides() {
+    const d = {};
+    S.params.forEach((p) => { if (p.name !== S.partVar && p.value !== p.def) d[p.name] = literal(p, p.value); });
+    return d;
+  }
+  function planParts() {
+    const mf = S.manifest;
+    const ov = overrides();
+    const files = withAliases(S.sources);
+    if (mf && mf.parts && mf.parts.some((p) => p.scad)) {
+      return mf.parts.filter((p) => p.scad).map((p) => {
+        const defs = Object.assign({}, ov);
+        Object.entries(p.scad.defines || {}).forEach(([k, v]) => { defs[k] = typeof v === 'string' ? JSON.stringify(v) : String(v); });
+        return { id: p.id || slug(p.name), name: p.name, scad: { file: srcPath(p.scad.file || S.main), defines: Object.assign({}, p.scad.defines || {}) }, job: { files, main: srcPath(p.scad.file || S.main), defines: defs } };
+      });
+    }
+    if (S.partVar) {
+      return S.partValues.map((v) => ({ id: slug(v), name: pretty(v), scad: { file: S.main, defines: { [S.partVar]: v } }, job: { files, main: S.main, defines: Object.assign({}, ov, { [S.partVar]: JSON.stringify(v) }) } }));
+    }
+    return [{ id: slug(S.main), name: pretty(S.main), scad: { file: S.main, defines: {} }, job: { files, main: S.main, defines: ov } }];
+  }
+  async function render() {
+    if (S.rendering || !S.main) return;
+    S.rendering = true;
+    const btn = $('scadRender'); btn.disabled = true; btn.textContent = 'Rendering…';
+    const V = window.mockupViewer;
+    const logLines = [];
+    const logEl = $('scadLog');
+    try {
+      if (!workers && !direct) V.setLoading('Loading the OpenSCAD engine (about 11 MB, first time only)…');
+      await engine();
+      const parts = planParts();
+      S.scadById = {}; parts.forEach((p) => { S.scadById[p.id] = p.scad; });
+      let done = 0;
+      const out = {}; const failed = [];
+      V.setLoading('Rendering ' + parts.length + (parts.length === 1 ? ' part' : ' parts') + '…');
+      const t0 = performance.now();
+      await runAll(parts, (p, res) => {
+        done++;
+        V.setLoading('Rendered ' + done + ' of ' + parts.length + '…');
+        logLines.push('── ' + p.name + (res.ms !== undefined ? '  (' + res.ms + ' ms)' : ''));
+        (res.log || []).filter((l) => !/initialize localization/.test(l)).forEach((l) => logLines.push(l));
+        if (res.error) logLines.push('ERROR: ' + res.error);
+        if (res.stl) out[p.id] = res.stl; else failed.push(p);
+      });
+      // retry failures once without the Manifold backend
+      const retry = failed.filter((p) => p.job.manifold !== false).map((p) => ({ ...p, job: { ...p.job, manifold: false } }));
+      if (retry.length) {
+        V.setLoading('Retrying ' + retry.length + ' with the classic geometry engine…');
+        await runAll(retry, (p, res) => {
+          logLines.push('── ' + p.name + ' (retry, classic engine)');
+          (res.log || []).forEach((l) => logLines.push(l));
+          if (res.stl) { out[p.id] = res.stl; failed.splice(failed.findIndex((f) => f.id === p.id), 1); }
+        });
+      }
+      logEl.textContent = logLines.join('\n') || 'No output.';
+      const ids = Object.keys(out);
+      if (!ids.length) {
+        V.setLoading('OpenSCAD produced no geometry. Open "OpenSCAD output" below for details.');
+        $('scadLogBox').open = true;
+        return;
+      }
+      const files = {}; ids.forEach((id) => { files[id + '.stl'] = out[id]; });
+      const mf = JSON.parse(JSON.stringify(S.manifest || {}));
+      const planned = parts.filter((p) => out[p.id]);
+      if (mf.parts && mf.parts.some((p) => p.scad)) {
+        mf.parts = mf.parts.filter((p) => out[p.id]).map((p) => Object.assign({}, p, { file: p.id + '.stl' }));
+      } else {
+        const known = {}; (mf.parts || []).forEach((p) => { known[p.id] = p; });
+        mf.parts = planned.map((p) => Object.assign({ id: p.id, name: p.name }, known[p.id] || {}, { file: p.id + '.stl' }));
+        if (!mf.name) mf.name = pretty(S.main);
+      }
+      await V.buildModel(mf, files, { keepView: S.rendered });
+      S.rendered = true;
+      const secs = ((performance.now() - t0) / 1000).toFixed(1);
+      failed.forEach((p) => V.warn(p.name + ' did not render; open "OpenSCAD output" for details.'));
+      if (failed.length) $('scadLogBox').open = true;
+      logEl.textContent = 'Rendered ' + ids.length + ' of ' + parts.length + ' parts in ' + secs + ' s.\n\n' + logEl.textContent;
+    } catch (e) {
+      V.setLoading('Could not start OpenSCAD: ' + (e && e.message ? e.message : e));
+      logEl.textContent = logLines.join('\n') + '\n' + String(e && e.stack || e);
+    } finally {
+      S.rendering = false; btn.disabled = false; btn.textContent = 'Render';
+    }
+  }
+
+  function setup(sources, main, manifest) {
+    S.sources = sources; S.main = main; S.manifest = manifest;
+    const src = text(sources[main]);
+    S.params = parseParams(src);
+    const pv = detectPartVar(src);
+    S.partVar = pv ? pv.name : null; S.partValues = pv ? pv.values : [];
+    renderPanel();
+  }
+
+  window.mockupScad = {
+    // lets the viewer's "Copy manifest" write scad sources instead of STL file names
+    partScad(id) {
+      if (!S.scadById) S.scadById = {};
+      if (!Object.keys(S.scadById).length && S.main) planParts().forEach((p) => { S.scadById[p.id] = p.scad; });
+      const v = S.scadById[id];
+      return v ? JSON.parse(JSON.stringify(v)) : null;
+    },
+    // embedded sample: STLs are already baked in, so show the parameters without rendering
+    init(scad, manifest) {
+      if (!scad || !scad.sources) return;
+      S.rendered = true;
+      setup(scad.sources, scad.main || pickMain(scad.sources), manifest);
+    },
+    async loadFiles(scadFiles, otherFiles, manifest) {
+      const sources = {};
+      for (const f of scadFiles) sources[f.name] = await f.text();
+      for (const k in otherFiles) sources[k] = new Uint8Array(otherFiles[k]);
+      return this.loadSources(sources, manifest);
+    },
+    // sources: {relativePath: text | Uint8Array}; renders right away
+    async loadSources(sources, manifest) {
+      const main = pickMain(sources);
+      const useManifest = manifest && manifest.parts && manifest.parts.some((p) => p.scad) ? manifest : (manifest ? Object.assign({}, manifest, { parts: (manifest.parts || []).filter((p) => !p.file || /\.scad$/i.test(p.file)) }) : null);
+      window.mockupViewer.clearWarnings();
+      S.rendered = false;
+      setup(sources, main, useManifest);
+      await render();
+    }
+  };
+})();
+</script>
