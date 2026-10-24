@@ -70,6 +70,17 @@ npm run serve      # http://localhost:8080/
 
 Source lives in `src/`: `viewer.html` (the viewer and its template), `scad-addon.html` (the OpenSCAD edition's panel, inserted at the `EDITION-SLOT` marker), `scad-worker.js` (renders in a Web Worker). See [CLAUDE.md](CLAUDE.md) for how the pieces fit and how releases and the Claude artifacts are updated.
 
+## How this was built
+
+This project was built with [Claude](https://claude.ai) (Anthropic) as an engineering collaborator, directed by Frank M Thompson. It follows agentic engineering practices rather than unreviewed generation:
+
+- **Human-directed design.** Requirements, scope and every design decision came from the maintainer and were refined over several review rounds. Examples include the Arrange editor, collapsible parameters, field labels, the split into a light viewer and an OpenSCAD edition, and the licensing.
+- **Tested, not assumed.** `npm test` covers building, OpenSCAD rendering, fonts and STL handling. Viewer changes are checked in a real headless browser at desktop and phone widths, in light and dark mode, before release.
+- **Continuous integration.** Every push runs the tests and a full build on GitHub Actions. Releases are tagged versions, so other projects pin exactly what they use.
+- **Documented for humans and agents.** [docs/manifest.md](docs/manifest.md) specifies the data format. [CLAUDE.md](CLAUDE.md) records the architecture, constraints and release steps so future sessions work from the same ground truth instead of guessing.
+- **Pinned dependencies and tracked licences.** Runtime libraries are pinned to exact versions, and third-party licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
+- **Traceable history.** Commits written with Claude carry a `Co-Authored-By: Claude` trailer.
+
 ## License
 
 [MIT](LICENSE) for this project's own code.
