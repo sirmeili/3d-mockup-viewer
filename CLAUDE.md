@@ -22,11 +22,12 @@ Interactive 3D mockups for 3D-printed enclosures. One viewer page (three.js), an
 ```sh
 npm install          # installs openscad-wasm-prebuilt and builds dist/
 npm test             # node:test, about 2 s
+npm run test:browser # Playwright smoke tests, about 6 min (needs npm run build and npx playwright install chromium)
 npm run build        # rebuild dist/
 node cli/mockup.js serve dist --port 8080
 ```
 
-After changing the viewer, check it in a real browser: `npm run build`, serve `dist/`, then open `demo.html`, `openscad/index.html` and `viewer.html?manifest=examples/sensor-box/manifest.json`. Headless Chromium needs `--use-angle=swiftshader --enable-unsafe-swiftshader` for WebGL. Check phone width (about 400 px) and dark mode too.
+After changing the viewer, run `npm run build && npm run test:browser` (test/browser/smoke.test.js). It loads every dist page in headless Chromium at 1200 px and 400 px, in light and dark mode. It checks that the canvas is actually drawn, there are no console errors and no sideways scroll, and that exploded, see-inside, section cut, Arrange and an OpenSCAD re-render all work. Screenshots land in `test-results/`; look at them. Without CDN access, set `MOCKUP_TEST_CDN_DIR` (see the test file). CI runs the same suite on every push and before every release. Extend it when you add a feature.
 
 ## Rules for the viewer page
 

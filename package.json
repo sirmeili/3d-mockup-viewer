@@ -22,6 +22,7 @@
     "build": "node scripts/build-dist.js",
     "prepare": "node scripts/build-dist.js --if-missing",
     "test": "node --test test/*.test.js",
+    "test:browser": "node --test --test-concurrency=1 test/browser/*.test.js",
     "serve": "node cli/mockup.js serve dist"
   },
   "dependencies": {
@@ -35,5 +36,8 @@
     "url": "git+https://github.com/sirmeili/3d-mockup-viewer.git"
   },
   "author": "Frank M Thompson",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
 }
