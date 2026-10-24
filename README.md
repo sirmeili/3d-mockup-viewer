@@ -72,6 +72,10 @@ npm run serve      # http://localhost:8080/
 
 Source lives in `src/`: `viewer.html` (the viewer and its template), `scad-addon.html` (the OpenSCAD edition's panel, inserted at the `EDITION-SLOT` marker), `scad-worker.js` (renders in a Web Worker). See [CLAUDE.md](CLAUDE.md) for how the pieces fit and how releases and the Claude artifacts are updated.
 
+## Roadmap
+
+Planned work is tracked in [TODO.md](TODO.md).
+
 ## How this was built
 
 This project was built with [Claude](https://claude.ai) (Anthropic) as an engineering collaborator, directed by Frank M Thompson. It follows agentic engineering practices rather than unreviewed generation:

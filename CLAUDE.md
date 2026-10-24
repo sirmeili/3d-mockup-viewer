@@ -17,6 +17,10 @@ Interactive 3D mockups for 3D-printed enclosures. One viewer page (three.js), an
 - `examples/sensor-box/`: sample model, used by the demos and tests.
 - `vendor/fonts/`: Liberation fonts for OpenSCAD `text()`.
 
+## Planned work
+
+See `TODO.md`. Keep it current: tick off or remove items in the same change that does them.
+
 ## Commands
 
 ```sh
