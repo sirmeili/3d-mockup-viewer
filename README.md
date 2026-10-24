@@ -70,6 +70,8 @@ npm run serve      # http://localhost:8080/
 
 Source lives in `src/`: `viewer.html` (the viewer and its template), `scad-addon.html` (the OpenSCAD edition's panel, inserted at the `EDITION-SLOT` marker), `scad-worker.js` (renders in a Web Worker). See [CLAUDE.md](CLAUDE.md) for how the pieces fit and how releases and the Claude artifacts are updated.
 
-## Third-party components
+## License
 
-See [THIRD_PARTY.md](THIRD_PARTY.md). The OpenSCAD WebAssembly build is GPL-2.0-or-later. That matters only if you distribute the OpenSCAD edition to others.
+[MIT](LICENSE) for this project's own code.
+
+Third-party components keep their own licenses; see [THIRD_PARTY.md](THIRD_PARTY.md). The OpenSCAD WebAssembly build that powers the OpenSCAD edition and the CLI's `.scad` rendering is GPL-2.0-or-later. The plain viewer and pages built without `--openscad` don't include it. If you hand the OpenSCAD edition (`dist/openscad/`, or a page built with `--openscad`) to other people, treat that bundle as GPL: keep `OPENSCAD-COPYING.txt` with it and point to the [OpenSCAD source](https://github.com/openscad/openscad).

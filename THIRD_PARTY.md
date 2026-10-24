@@ -1,5 +1,7 @@
 # Third-party components
 
+This project's own code is MIT licensed (see LICENSE). The components below keep their own licenses.
+
 | Component | Used for | License | How it is included |
 |---|---|---|---|
 | [three.js](https://threejs.org) r128 (core, OrbitControls, STLLoader, GLTFLoader) | 3D rendering | MIT | Loaded from cdnjs / jsDelivr at runtime |
