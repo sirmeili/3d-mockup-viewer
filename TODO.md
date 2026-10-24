@@ -72,3 +72,26 @@ A **Manifest editor** button opens a large dialog that edits everything a manife
 - **Tests:** browser tests that open the editor at desktop and phone widths in both themes, reorder by drag and by keyboard, edit a spec section, and confirm Copy/Save output matches. Also an accessibility pass: focus trap in the dialog, Esc to close, labelled controls.
 
 Supersedes the UI part of item 3 (spec and page-text editing happen here). Item 3's data rules still apply.
+
+## 6. Simple inline embed (display only)
+
+A one-line way to put a small, read-only model view inside a document or page, like an image.
+
+- **Script tag + custom element:**
+  ```html
+  <script src="https://sirmeili.github.io/3d-mockup-viewer/embed.js"></script>
+  <mockup-embed src="mockup/manifest.json" height="320" controls="show,view,finish"></mockup-embed>
+  ```
+  Attributes:
+  - `src`: a manifest URL, or a single model file.
+  - `height`: default about 320 px. Width fills the container.
+  - `controls`: any of `show`, `view`, `finish`, `cut`, or `none`.
+  - `view` / `mode` / `finish`: the starting state.
+  - `link`: adds an "Open full viewer" link.
+- **Iframe fallback** for pages that don't allow scripts: `viewer.html?embed&manifest=…`.
+- **Compact mode:** model only, with a slim control strip (Show, View, Finish swatches) overlaid or below. Drag to rotate, scroll or pinch to zoom. No header, parts list, spec sheet, Arrange, editor or Load files. Respects the page's light/dark mode.
+- **Many embeds on a page:** browsers cap live WebGL contexts at roughly 16. Show a still preview until the embed scrolls into view or is clicked, then start the 3D view. Release contexts that scroll far away.
+- **Static fallback for places that strip scripts** (e.g. GitHub READMEs): have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer.
+- **Shares plumbing with item 1.** The embedding API is the full two-way version; build this first and reuse it there.
+- **Tests:** a test page with several embeds (desktop and phone, light and dark), checking that each draws, controls work, off-screen embeds stay as stills, and nothing scrolls sideways.
+- **Docs:** `docs/embedding.md`, shared with item 1.
