@@ -28,4 +28,5 @@
 | 2026-10-24 | `<mockup-viewer>` custom element (optional in item 1) not built; noted under the inline-embed item. | Overlaps `<mockup-embed>`; better designed together. |
 
 ## Open questions
-- See docs/SPEC.md section 13 (seven items, including a path check bug in `mockup serve`).
+- See docs/SPEC.md section 13 (nine items, including a path check bug in `mockup serve`).
+- Owner is considering two Save questions (spec open questions 8 and 9): the exception to the no-download rule plus how to detect artifacts, and whether Save in an embedded viewer messages the host. Decide before building planned item 3.
