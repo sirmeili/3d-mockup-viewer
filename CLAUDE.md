@@ -12,7 +12,7 @@ Interactive 3D mockups for 3D-printed enclosures. One viewer page (three.js), an
   - It exposes `window.mockupViewer` (buildModel, warn, setLoading…) and calls `window.mockupScad` hooks if present.
   - `<meta name="mockup-embed-origins">`: build-time list of origins allowed to drive the page from a parent frame (embedding API, `docs/embedding.md`). Empty means only `?parent=` can turn embedding on.
 - `src/scad-addon.html`: OpenSCAD edition panel: parameter parsing, part-selector detection, worker pool, re-render. Defines `window.mockupScad` (`init`, `loadFiles`, `loadSources`, `partScad`).
-- `src/embed.js`: host-side helper for the embedding API (`embedViewer`), exported as `3d-mockup-viewer/embed` and copied to `dist/embed.js`. The protocol lives in the "embedding API" section of `viewer.html`; keep both and `docs/embedding.md` in step, and bump the protocol version for breaking changes.
+- `src/embed.js`: host-side helper for the embedding API (`embedViewer`) and the `<mockup-embed>` element, exported as `3d-mockup-viewer/embed`. The build copies it to `dist/embed.mjs` and converts it to a classic script, `dist/embed.js` (`classicEmbed` in `lib/build.js`), so keep to top-level `export const|function|class` and `import.meta.url`. The protocol lives in the "embedding API" section of `viewer.html`; keep both and `docs/embedding.md` in step, and bump the protocol version for breaking changes.
 - `src/scad-worker.js`: module worker that imports `./openscad.js`. A fresh OpenSCAD instance per job (the WASM build only allows one `callMain` per instance). Renders with `--backend=manifold`, retries once with the classic engine.
 - `src/landing.html`: GitHub Pages index.
 - `lib/`: Node library (`build.js` page building, `scad.js` rendering via `openscad-wasm-prebuilt`, `edition.js` OpenSCAD runtime files, `stl.js`).
@@ -35,7 +35,7 @@ npm run build        # rebuild dist/
 node cli/mockup.js serve dist --port 8080
 ```
 
-After changing the viewer, run `npm run build && npm run test:browser` (test/browser/smoke.test.js). It loads every dist page in headless Chromium at 1200 px and 400 px, in light and dark mode. It checks that the canvas is actually drawn, there are no console errors and no sideways scroll, and that exploded, see-inside, section cut, Arrange and an OpenSCAD re-render all work. The embed tests run `test/browser/embed-host.html` from a second local server and drive the viewer through `embed.js`. Screenshots land in `test-results/`; look at them. Without CDN access, set `MOCKUP_TEST_CDN_DIR` (see the test file). CI runs the same suite on every push and before every release. Extend it when you add a feature.
+After changing the viewer, run `npm run build && npm run test:browser` (test/browser/smoke.test.js). It loads every dist page in headless Chromium at 1200 px and 400 px, in light and dark mode. It checks that the canvas is actually drawn, there are no console errors and no sideways scroll, and that exploded, see-inside, section cut, Arrange and an OpenSCAD re-render all work. The embed tests run `test/browser/embed-host.html` (embedding API, through `embed.mjs`) and `test/browser/embeds-page.html` (20 `<mockup-embed>`s, through the classic `embed.js`) from a second local server. Screenshots land in `test-results/`; look at them. Without CDN access, set `MOCKUP_TEST_CDN_DIR` (see the test file). CI runs the same suite on every push and before every release. Extend it when you add a feature.
 
 ## Rules for the viewer page
 

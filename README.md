@@ -7,6 +7,7 @@ Interactive mockups for 3D-printed enclosures. Load STL, 3MF, GLB or OpenSCAD pa
 - **Arrange**: set groups, explode offsets, materials and names visually, then copy the manifest
 - **Manifest editor**: edit everything in the manifest in one dialog (page text, parts, groups, views, finishes, spec sheet, raw JSON), with a live preview, drag-and-drop reordering, a change list and undo
 - **OpenSCAD edition**: renders `.scad` files in the browser and turns top-level values into editable fields
+- **Inline embeds**: `<mockup-embed>` puts a small display-only model view in any page; many can share a page
 - **Embedding API**: another app can put the viewer in an iframe, load models into it and get edited manifests back
 
 Everything runs in the browser. A finished mockup is a single HTML file you can open, share or host anywhere.
@@ -18,7 +19,7 @@ Everything runs in the browser. A finished mockup is a single HTML file you can 
 | `dist/viewer.html` | Empty viewer. Drop files on it, or load `viewer.html?manifest=path/to/manifest.json` from the same site. |
 | `dist/openscad/` | The same viewer with OpenSCAD built in (`viewer.html`, plus `openscad.js`, the render worker and fonts). Needs http, not `file://`. |
 | `dist/demo.html`, `dist/openscad/index.html` | Both viewers with a sample model. These are what the Claude artifacts publish. |
-| `dist/embed.js` | Host helper for the embedding API (also `import { embedViewer } from '3d-mockup-viewer/embed'`). See [docs/embedding.md](docs/embedding.md). |
+| `dist/embed.js`, `dist/embed.mjs` | `<mockup-embed>` for inline views, and the embedding API helper: a classic script and an ES module (also `import { embedViewer } from '3d-mockup-viewer/embed'`). See [docs/embedding.md](docs/embedding.md). |
 | `mockup` CLI | Builds single-file mockups from a manifest, renders `.scad` parts with the bundled OpenSCAD, copies the viewer into other projects. |
 
 `npm run build` produces `dist/`. It is not committed.
@@ -41,7 +42,7 @@ npx mockup serve mockup                              # http://localhost:8080/vie
 
 - `mockup/index.html` is a self-contained page with every part baked in. Commit it, attach it, or publish it as an artifact.
 - `mockup/viewer.html?manifest=manifest.json` loads the manifest and part files live. Use it when the project already serves files, such as a project tracker.
-- To drive the viewer from another app (load models, switch views, save Arrange edits), embed it in an iframe with `embed.js`. See [docs/embedding.md](docs/embedding.md).
+- To show a mockup inside another page, like an image: `<script src=".../embed.js"></script>` and `<mockup-embed src="mockup/manifest.json"></mockup-embed>`. To drive the viewer from another app (load models, switch views, save Arrange edits), use the embedding API. Both are in [docs/embedding.md](docs/embedding.md).
 - `--openscad` on `init`, `build` or `viewer` uses the OpenSCAD edition, so values can be edited and re-rendered in the page. Live loading renders any part whose STL is missing, straight from the `.scad` file. Serve from the project root (`npx mockup serve .`, then open `/mockup/viewer.html?manifest=manifest.json`) so the page can reach the `.scad` file.
 
 To upgrade: change the tag in `package.json`, reinstall, then run `npx mockup viewer mockup` to refresh the copied viewer.

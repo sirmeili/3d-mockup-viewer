@@ -475,6 +475,93 @@ test('manifest editor: sections fit a phone (dark)', async () => {
   }
 });
 
+// ---------- compact mode (?embed), what <mockup-embed> shows ----------
+test('compact mode: model and chosen controls only, with the starting state', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 600, height: 340 } });
+  await routeCdn(ctx);
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  try {
+    await page.goto(BASE + 'viewer.html?embed&manifest=examples/sensor-box/manifest.json&controls=show,finish&mode=exploded&view=top&finish=Slate%20blue&theme=dark');
+    await page.waitForFunction(() => document.getElementById('loading').hidden, null, { timeout: 60000 });
+    assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
+    for (const sel of ['header', '#lower', '#status', '#foot', '#openBox', '#viewSeg', '#cutSeg', '#edges']) {
+      assert.equal(await page.locator(sel).isVisible(), false, sel + ' is hidden');
+    }
+    for (const sel of ['#stage', '#m-exploded', '#f-slate-blue']) assert.ok(await page.locator(sel).isVisible(), sel + ' shows');
+    assert.equal(await page.getAttribute('#m-exploded', 'aria-pressed'), 'true', 'starts exploded');
+    assert.equal(await page.getAttribute('#v-top', 'aria-pressed'), 'true', 'starts on the top view');
+    assert.equal(await page.getAttribute('#f-slate-blue', 'aria-pressed'), 'true', 'starts with Slate blue');
+    assert.ok(await canvasColours(page) > 40, 'model drawn');
+    const fit = await page.evaluate(() => [document.documentElement.scrollWidth - innerWidth, document.documentElement.scrollHeight - innerHeight]);
+    assert.ok(fit[0] <= 1 && fit[1] <= 1, `compact page fits its frame (overflow ${fit})`);
+    await page.screenshot({ path: path.join(SHOTS, 'compact-600x340-dark.png') });
+
+    await page.goto(BASE + 'viewer.html?embed&manifest=examples/sensor-box/manifest.json&controls=none');
+    await page.waitForFunction(() => document.getElementById('loading').hidden, null, { timeout: 60000 });
+    assert.equal(await page.locator('.controls').isVisible(), false, 'controls=none leaves the model alone');
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+// ---------- <mockup-embed>: many display-only embeds on one page ----------
+const embedState = (page, id) => page.evaluate((i) => document.getElementById(i).dataset.state, id);
+const liveFrames = (page) => page.evaluate(() => Array.from(document.querySelectorAll('mockup-embed')).filter((e) => e.shadowRoot.querySelector('iframe')).length);
+
+for (const [vp, scheme] of [[VIEWPORTS[0], 'light'], [VIEWPORTS[1], 'dark']]) {
+  test(`mockup-embed: many on a page, live near the viewport, stills elsewhere (${vp.name}, ${scheme})`, async () => {
+    const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, colorScheme: scheme });
+    await routeCdn(ctx);
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+    // the embed with a missing manifest logs its 404; anything else is a failure
+    page.on('console', (m) => { if (m.type() === 'error' && !/missing\.json/.test(m.location().url)) errors.push('console: ' + m.text()); });
+    try {
+      await page.goto(HOST + 'many');
+      await page.waitForFunction(() => document.getElementById('e0').dataset.state === 'live', null, { timeout: 60000 });
+      const frame = await (await page.locator('#e0 iframe').elementHandle()).contentFrame();
+      assert.ok(await canvasColours(frame) > 40, 'the first embed draws its model');
+      assert.ok(await frame.locator('#m-exploded').isVisible(), 'chosen controls show');
+      assert.equal(await frame.locator('header').isVisible(), false, 'compact: no header');
+      assert.match(await page.getAttribute('#e0 .open', 'href'), /viewer\.html\?manifest=.*manifest\.json$/, 'link opens the full viewer');
+
+      // load="click" waits; clicking its cover starts it
+      assert.equal(await embedState(page, 'e1'), 'still');
+      assert.equal(await page.locator('#e1 iframe').count(), 0);
+      await page.click('#e1 .cover');
+      await page.waitForFunction(() => document.getElementById('e1').dataset.state === 'live', null, { timeout: 60000 });
+      // controls="none" and a missing manifest
+      await page.locator('#e3').scrollIntoViewIfNeeded();
+      await page.waitForFunction(() => ['e2', 'e3'].every((i) => ['live', 'error'].includes(document.getElementById(i).dataset.state)), null, { timeout: 60000 });
+      const f2 = await (await page.locator('#e2 iframe').elementHandle()).contentFrame();
+      assert.equal(await f2.locator('.controls').isVisible(), false, 'controls="none" shows no strip');
+      assert.equal(await embedState(page, 'e3'), 'error');
+      assert.match(await page.locator('#e3 .label').textContent(), /^Couldn't show the 3D view/);
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert.ok(over <= 1, `page scrolls sideways by ${over}px`);
+      await page.screenshot({ path: path.join(SHOTS, `embeds-${vp.name}-${scheme}.png`) });
+      assert.ok(await liveFrames(page) <= 8, 'at most 8 live 3D views');
+
+      // far down the page: the top embeds swap to stills, the bottom ones go live
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForFunction(() => document.getElementById('e19').dataset.state === 'live' && document.getElementById('e0').dataset.state === 'still', null, { timeout: 60000 });
+      assert.match(await page.getAttribute('#e0 img', 'src'), /^data:image\/jpeg;base64,/, 'a released embed keeps a still');
+      assert.equal(await page.locator('#e0 iframe').count(), 0, 'and frees its 3D view');
+      assert.ok(await liveFrames(page) <= 8, 'still at most 8 live 3D views');
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({ path: path.join(SHOTS, `embeds-stills-${vp.name}-${scheme}.png`) });
+      assert.deepEqual(errors, [], 'no page or console errors');
+    } finally {
+      await ctx.close();
+    }
+  });
+}
+
 // ---------- embedding API: a host page on another origin drives the viewer in an iframe ----------
 // The host is a second real server on another port, so a different origin. (A Playwright-routed origin
 // doesn't work: Chromium's local network access checks then refuse to frame localhost.)
@@ -491,9 +578,13 @@ test.before(async () => {
   });
   hostServer = http.createServer((req, res) => {
     const p = new URL(req.url, HOST).pathname;
-    if (p === '/') send(res, path.join(ROOT, 'test', 'browser', 'embed-host.html'), 'text/html; charset=utf-8');
-    else if (p === '/embed.js') send(res, path.join(DIST, 'embed.js'), 'text/javascript');
+    const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json' };
+    if (p === '/') send(res, path.join(ROOT, 'test', 'browser', 'embed-host.html'), types['.html']);
+    else if (p === '/many') send(res, path.join(ROOT, 'test', 'browser', 'embeds-page.html'), types['.html']);
+    else if (p === '/embed.mjs') send(res, path.join(DIST, 'embed.mjs'), 'text/javascript');
     else if (p.startsWith('/files/')) send(res, path.join(DIST, 'examples', 'sensor-box', path.basename(p)), 'application/octet-stream');
+    // dist/ on the host's own origin, for <mockup-embed> pages that load dist/embed.js beside viewer.html
+    else if (p.startsWith('/dist/')) send(res, path.join(DIST, ...p.slice(6).split('/')), types[path.extname(p)] || 'application/octet-stream');
     else { res.writeHead(404); res.end('not found'); }
   });
   await new Promise((resolve) => hostServer.listen(HOST_PORT, resolve));
@@ -537,6 +628,9 @@ test('embed: host loads by URL, sets controls, and gets change events from Arran
     assert.deepEqual(await page.evaluate(() => viewer.setCut('x', 0.25)), { axis: 'x', position: 0.25 });
     assert.equal(await f.getAttribute('#cut-x', 'aria-pressed'), 'true');
     await page.evaluate(() => viewer.setCut('off'));
+    const shot = await page.evaluate(() => viewer.snapshot());
+    assert.match(shot.image, /^data:image\/jpeg;base64,/);
+    assert.ok(shot.width > 100 && shot.image.length > 10000, 'snapshot holds a picture of the model');
 
     // bad input comes back as a coded error, not silence
     const code = (fn) => page.evaluate(fn);

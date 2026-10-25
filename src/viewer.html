@@ -36,7 +36,7 @@
   --fg: #e4e9e8; --muted: #9aa6a7; --line: #2d3537; --accent: #5fb3cf; --accent-ink: #0d1517;
   --edge: #000000; --warn: #e2a64b; color-scheme: dark;
 }
-[hidden] { display: none !important; }
+[hidden], [data-off] { display: none !important; }
 html, body { background: var(--bg); color: var(--fg); }
 body { font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
 .wrap {
@@ -278,7 +278,29 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   .ed-aside { display: none; }
   .ed-head, .ed-main, .ed-foot { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 }
+
+/* Compact mode (?embed, for <mockup-embed> and iframes): the model and a slim control strip filling the frame */
+:root[data-embed], :root[data-embed] body { height: 100%; margin: 0; background: transparent; }
+:root[data-embed] .wrap { max-width: none; height: 100%; box-sizing: border-box; padding: 0; gap: 6px; grid-template-rows: minmax(0, 1fr) auto; }
+:root[data-embed] .wrap > :not(.stage):not(.controls) { display: none; }
+:root[data-embed] .stage { aspect-ratio: auto; height: 100%; min-height: 0; max-height: none; }
+:root[data-embed] .tag.hint { display: none; }
+:root[data-embed] .controls { gap: 6px 10px; padding: 0 2px 2px; }
+:root[data-embed] .controls .lbl, :root[data-embed] .controls .toggle { display: none; }
 </style>
+<script>
+// compact mode for inline embeds (?embed), set before the page paints so the full layout never shows
+(function () {
+  try {
+    var q = new URLSearchParams(location.search);
+    if (!q.has('embed')) return;
+    var r = document.documentElement;
+    r.setAttribute('data-embed', '');
+    var t = q.get('theme');
+    if (t === 'light' || t === 'dark') r.setAttribute('data-theme', t);
+  } catch (e) { /* no query string here */ }
+})();
+</script>
 
 <div class="wrap">
   <header>
@@ -418,7 +440,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
   let DATA = null;
   try { DATA = JSON.parse($('mockup-data').textContent); } catch (e) { DATA = null; }
-  const dropIn = !DATA || DATA.dropIn !== false;
+  const embedMode = document.documentElement.hasAttribute('data-embed'); // compact mode (?embed)
+  const dropIn = !embedMode && (!DATA || DATA.dropIn !== false);
 
   // ---------- embedding: allowed parent origins ----------
   // Off unless the page lists the origins allowed to drive it: at build time (the mockup-embed-origins meta tag)
@@ -2451,6 +2474,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     },
     setArrange(m) { setArranging(!!m.on); return { on: state.arranging }; },
     getManifest() { return { manifest: currentManifest() }; },
+    snapshot() { needModel(); return snapshot(); },
     'scad.setValues'(m) {
       const addon = scadAddon();
       if (!m.values || typeof m.values !== 'object') throw fail('bad-value', 'values must be an object of name: value.');
@@ -2479,7 +2503,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   let hostQueue = null;
   function startEmbedding(initialLoad) {
     if (!embedOrigins.length) return;
-    $('arrBox').hidden = false; $('edBox').hidden = false;
+    if (!embedMode) { $('arrBox').hidden = false; $('edBox').hidden = false; }
     hostQueue = initialLoad.then(() => postToHost('ready', {
       edition: window.mockupScad ? 'openscad' : 'standard',
       viewerVersion: (document.querySelector('meta[name="mockup-viewer-version"]') || {}).content || null,
@@ -2491,6 +2515,39 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       if (!m || typeof m !== 'object' || m.protocol !== PROTOCOL || m.type === 'reply') return;
       hostQueue = hostQueue.then(() => runHostCommand(m));
     });
+  }
+
+  // A still of the stage as a JPEG data URL: the stage's background gradient with the model drawn over it,
+  // so it looks like the live view (used by <mockup-embed> while its 3D view is released)
+  function snapshot() {
+    renderer.render(scene, camera); // the WebGL buffer is only readable in the same task as a render
+    const w = canvas.width, h = canvas.height;
+    const out = document.createElement('canvas'); out.width = w; out.height = h;
+    const g = out.getContext('2d');
+    const bg = g.createRadialGradient(w * 0.5, h * 0.3, 0, w * 0.5, h * 0.3, Math.max(w, h) * 0.9);
+    bg.addColorStop(0, cssColor('--stage-a')); bg.addColorStop(1, cssColor('--stage-b'));
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.drawImage(canvas, 0, 0);
+    return { image: out.toDataURL('image/jpeg', 0.85), width: w, height: h };
+  }
+
+  // compact mode: which controls show (?controls=show,view,finish,cut or none) and the starting state (?mode, ?view, ?finish)
+  function embedParams() { try { return new URLSearchParams(location.search); } catch (e) { return new URLSearchParams(''); } }
+  if (embedMode) {
+    const want = (embedParams().get('controls') || 'show,view,finish').toLowerCase().split(',').map((x) => x.trim());
+    const groups = { show: $('m-assembled').closest('.group'), view: $('viewSeg').closest('.group'), finish: $('finishBox'), cut: $('cutSeg').closest('.group') };
+    Object.keys(groups).forEach((k) => { if (!want.includes(k)) groups[k].dataset.off = ''; });
+    if (!Object.keys(groups).some((k) => want.includes(k))) document.querySelector('.controls').dataset.off = '';
+  }
+  function applyStartState() {
+    if (!embedMode || !state.parts.length) return;
+    const q = embedParams();
+    const mode = q.get('mode'), view = q.get('view'), finish = (q.get('finish') || '').toLowerCase();
+    if (['assembled', 'exploded', 'inside'].includes(mode)) setMode(mode, true);
+    const views = Array.from(document.querySelectorAll('#viewSeg [data-view]')).map((b) => b.dataset.view);
+    goView(view && views.includes(view) ? view : current, true); // also refits the camera for the mode
+    const f = finish && state.finishList.find((x) => x.name.toLowerCase() === finish || x.color.toLowerCase() === finish);
+    if (f) pickFinish(f.color);
   }
 
   // ---------- render loop ----------
@@ -2534,7 +2591,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   if (mq.addEventListener) mq.addEventListener('change', retint);
   new MutationObserver(retint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-  startEmbedding(loadEmbedded().catch((e) => {
+  startEmbedding(loadEmbedded().then(applyStartState).catch((e) => {
     const message = 'Could not load the model: ' + (e && e.message ? e.message : e);
     $('loading').hidden = false; $('loading').textContent = message;
     postToHost('error', { code: 'load-failed', message });

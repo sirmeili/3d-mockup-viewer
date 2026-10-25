@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Many embeds</title>
+<!-- Test page for <mockup-embed>, served by the browser tests at /many with dist/ under /dist/.
+     20 embeds: #e0 has a link and three controls, #e1 waits for a click, #e2 has no controls,
+     #e3 points at a manifest that doesn't exist; the rest are plain. -->
+<style>
+  body { margin: 0; padding: 16px; font: 15px/1.5 system-ui, sans-serif; }
+  mockup-embed { margin: 0 0 40px; }
+</style>
+<h1>Many embeds</h1>
+<mockup-embed id="e0" src="dist/examples/sensor-box/manifest.json" height="240" controls="show,view,finish" title="Sensor box" link></mockup-embed>
+<script>
+  const special = { 1: { load: 'click' }, 2: { controls: 'none' }, 3: { src: 'dist/examples/sensor-box/missing.json' } };
+  for (let i = 1; i < 20; i++) {
+    const e = document.createElement('mockup-embed');
+    e.id = 'e' + i;
+    e.setAttribute('src', 'dist/examples/sensor-box/manifest.json');
+    e.setAttribute('height', '240');
+    e.setAttribute('title', 'Sensor box ' + i);
+    Object.entries(special[i] || {}).forEach(([k, v]) => e.setAttribute(k, v));
+    document.body.appendChild(e);
+  }
+</script>
+<script src="dist/embed.js"></script>

@@ -21,7 +21,8 @@ The project turns 3D-printable enclosure designs into interactive, shareable moc
 | Where | What runs | Typical use |
 |---|---|---|
 | Claude artifacts | `dist/demo.html` and `dist/openscad/index.html`, published as two artifacts | A public sample, and a place to drop in files without installing anything |
-| GitHub Pages | All of `dist/`, deployed on each release | The same pages plus the empty viewers and `embed.js` |
+| GitHub Pages | All of `dist/`, deployed on each release | The same pages plus the empty viewers and `embed.js` / `embed.mjs` |
+| Any web page or document that allows scripts | `<mockup-embed>` from `embed.js` | A small display-only model view, placed like an image |
 | Other repositories | The `mockup` CLI, installed from GitHub at a tag | Build a single-file mockup page, or copy in a live viewer that reads `manifest.json` |
 | The owner's `enclosure-mockup` Claude skill | The CLI (`npx github:sirmeili/3d-mockup-viewer#<tag> build …`) | Builds per-project mockups automatically |
 | Host apps (first target: the owner's `ai-project-tracker`) | The viewer in an iframe, driven by the embedding API | Show and edit a project's mockup inside another app |
@@ -52,7 +53,7 @@ The project turns 3D-printable enclosure designs into interactive, shareable moc
 | `src/viewer.html` | The viewer **and** the page template. An HTML fragment (no doctype, head or body), because Claude artifacts wrap pages in a skeleton at publish time. One inline script holds all viewer logic. |
 | `src/scad-addon.html` | The OpenSCAD edition: a panel (styles, markup, script) inserted at the template's edition slot. Defines `window.mockupScad`. |
 | `src/scad-worker.js` | Module Web Worker that renders one OpenSCAD job. Imports `./openscad.js`. |
-| `src/embed.js` | Host-side helper for the embedding API (`embedViewer`). ES module. |
+| `src/embed.js` | Host-side helper for the embedding API (`embedViewer`) and the `<mockup-embed>` element. ES module; the build also converts it to a classic script. |
 | `src/landing.html` | GitHub Pages index page. |
 | `lib/build.js` | `renderPage` (fill the template) and `buildMockup` (manifest to one HTML page). |
 | `lib/scad.js` | `renderPart`: render a `.scad` file to binary STL with the bundled WebAssembly OpenSCAD or a native `openscad`. |
@@ -241,7 +242,16 @@ One section per `spec` entry (definition list for `rows`, bullets for `items`, a
 - **Undo history:** every edit records a snapshot of the edits first. Typing in one field (or one explode axis) within 1.5 seconds counts as one step, and an edit that changes nothing isn't recorded. Up to 200 steps. Undo and Redo are in the editor's footer and cover Arrange's edits too. History starts empty for each model and survives an OpenSCAD re-render of the same parts.
 - Each edit is remembered, redraws the model and panels, refreshes the editor's change list, and (when embedded) schedules the `change` event.
 
-### 6.13 Messages and failure states
+### 6.13 Compact mode (`?embed`)
+What `<mockup-embed>` (9.1) and plain iframes show: `viewer.html?embed&manifest=…`.
+- A small inline script at the top of the page sets `data-embed` on the root before the page paints, so the full layout never flashes. CSS then hides everything in the page except the stage and the control strip: header (with Load files and Edit manifest), warnings, parts and spec panels, footer, the OpenSCAD panel, the stage's hint, the Edges toggle and the control labels. The stage fills the frame and the strip sits below it; the page background is transparent.
+- Load files and drag-and-drop are off; Arrange and the manifest editor aren't shown even when embedded.
+- `controls`: any of `show`, `view`, `finish`, `cut` (comma-separated), or `none` for no strip. Default `show,view,finish`. Hidden groups get `data-off`.
+- Starting state, applied after the model loads: `mode` (`assembled`, `exploded`, `inside`), `view` (a listed view name; the camera is refitted either way), `finish` (a finish name or colour).
+- `theme=light|dark` forces a theme; otherwise the frame follows the system setting like any page.
+- Query strings don't reach pages inside Claude artifacts, so compact mode is for self-hosted viewers.
+
+### 6.14 Messages and failure states
 - The loading tag shows progress ("Loading model…", "Reading files…", "Rendering 9 parts…") and final failures.
 - Non-fatal problems (missing or unreadable files, skipped file types, OpenSCAD parts that failed) are listed in the warning line under the controls.
 - If three.js fails to load, the stage says so and nothing else runs.
@@ -302,8 +312,8 @@ Reads the manifest. For each part: renders its `scad` (unless rendering is off),
 **Compatibility rule:** existing commands and flags keep working across releases. New flags are additive. The `enclosure-mockup` skill must be updated in the same change if that ever can't hold.
 
 ### 8.4 Package exports
-- `3d-mockup-viewer`: `buildMockup`, `renderPage`, `TEMPLATE`, `SCAD_ADDON`, `SRC_DIR`, `renderPart`, `scadLiteral`, `FONT_DIR`, `toBinaryStl`, `isAsciiStl`, `triangleCount`, `writeOpenscadEdition`.
-- `3d-mockup-viewer/embed`: `embedViewer`, `PROTOCOL`, `PROTOCOL_VERSION`.
+- `3d-mockup-viewer`: `buildMockup`, `renderPage`, `classicEmbed`, `TEMPLATE`, `SCAD_ADDON`, `SRC_DIR`, `EMBED`, `renderPart`, `scadLiteral`, `FONT_DIR`, `toBinaryStl`, `isAsciiStl`, `triangleCount`, `writeOpenscadEdition`.
+- `3d-mockup-viewer/embed`: `embedViewer`, `defineMockupEmbed`, `PROTOCOL`, `PROTOCOL_VERSION`. Importing it in a browser also registers `<mockup-embed>`.
 
 ## 9. Embedding API
 
@@ -311,11 +321,20 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 
 - **Off by default.** The viewer listens only when it is framed and its parent's origin is allowed: by `?parent=origin[,origin]`, or by the build-time list (`--embed-origin`), which, when set, makes `?parent=` ignored. Messages must come from `window.parent` with an allowed origin and carry `protocol: 'mockup-viewer'`.
 - **Protocol version 1.** Every message carries the version. A breaking change increases it, and the viewer answers other versions with a `version` error.
-- **Commands:** `load`, `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `scad.setValues`, `scad.render`. They run one at a time, in order, after the page's own model has loaded. Each reply is `{ ok: true, result }` or `{ ok: false, error: { code, message } }`.
+- **Commands:** `load`, `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `snapshot`, `scad.setValues`, `scad.render`. `snapshot` returns `{ image, width, height }`: a JPEG data URL of the current view painted over the stage's background gradient so it matches the live view, sized in device pixels. They run one at a time, in order, after the page's own model has loaded. Each reply is `{ ok: true, result }` or `{ ok: false, error: { code, message } }`.
 - **Events:** `ready` (after the initial load), `loaded` (after every build), `change` (400 ms after the last edit in Arrange or the manifest editor, with the full manifest), `error` (failures not caused by a command).
 - **Credentials:** loads requested by a host allowed only through `?parent=` fetch with `credentials: 'omit'`, because anyone can frame the viewer with their own `?parent=`. With a build-time list, fetches send cookies as usual.
 - **The viewer UI stays complete when embedded**, and Arrange is available.
 - The helper `embedViewer` adds `?parent=`, waits for `ready` (default 30 seconds), resolves relative URLs against the host page, transfers ArrayBuffers, and turns replies into promises.
+- **Packaging:** `src/embed.js` is an ES module (the npm export). The build writes it twice: `dist/embed.mjs`, a copy, and `dist/embed.js`, a classic script for `<script src>` made by `classicEmbed` (`lib/build.js`): the same code in a function scope, its exports on `window.mockupViewer`, `import.meta.url` replaced by the script's own URL. The source keeps to syntax that conversion handles; a unit test checks the result parses and runs.
+
+### 9.1 Inline embeds: `<mockup-embed>`
+`<mockup-embed src="mockup/manifest.json" height="320" controls="show,view,finish" link>` shows a small, display-only model view in any page. Built on compact mode (6.13) and the embedding API; attribute reference in docs/embedding.md.
+- **Attributes:** `src` (manifest URL; a single model file once planned item 1 exists), `height` (px or CSS length, default 320; width fills the container), `controls`, `view`, `mode`, `finish`, `theme` (passed to compact mode; `theme` also styles the element), `link` ("Open full viewer" to `viewer.html?manifest=…`, or the URL given), `load="click"` (start only on a click), `title` (screen-reader name, default "3D model"), `viewer` (viewer page URL; default `viewer.html` beside the script). Changing an attribute that affects the view restarts it.
+- **Structure:** a shadow root with a frame (the stage's gradient, rounded), an iframe slot made by `embedViewer` (`?embed`, the attributes as query parameters, and `?parent=`), and a cover button that shows the still and a label ("Show 3D view", "Loading 3D view…", or the error). Colours are custom properties on `:host` with a dark set under `prefers-color-scheme` and `theme`.
+- **Live and still:** an `IntersectionObserver` with a 200 px margin starts the 3D view when the embed nears the viewport (unless `load="click"`); a second one with a 1200 px margin releases it when it is far away. Starting keeps the iframe hidden under the cover until `ready` reports a model, then reveals it and takes a still 400 ms later. Releasing takes a fresh still (`snapshot`), then destroys the iframe and its WebGL context (forced after 3 seconds if the frame doesn't answer). Clicking the cover starts it. At most `MAX_LIVE` (8) embeds are live; starting another releases the live one farthest from the middle of the viewport. Without `IntersectionObserver`, embeds start at once. The element's `data-state` is `still`, `loading`, `live` or `error`.
+- **Failures:** a viewer error, a load that yields no model, or no `ready` within 60 seconds shows "Couldn't show the 3D view: <reason>" in the frame.
+- **Without scripts:** `viewer.html?embed&manifest=…` in a plain iframe.
 
 ## 10. Build, tests and release
 
@@ -329,7 +348,7 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 | `openscad/index.html` | OpenSCAD edition with the sample and its sources, drop-in. Published as the "OpenSCAD Mockup Viewer" artifact. |
 | `openscad/viewer.html` | Empty OpenSCAD edition. |
 | `openscad/openscad.js`, `scad-worker.js`, `fonts/`, `OPENSCAD-COPYING.txt` | OpenSCAD runtime. |
-| `embed.js` | Embedding helper. |
+| `embed.js`, `embed.mjs` | `<mockup-embed>` and the embedding helper: classic script and ES module. |
 | `examples/sensor-box/` | Sample manifest, rendered STLs and `.scad`, for URL mode. |
 
 `npm install` runs the build if `dist/demo.html` is missing.
@@ -339,7 +358,9 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 - `npm run test:browser` (Playwright, about 6 minutes; needs a build and Chromium):
   - Every dist page (demo, OpenSCAD demo, URL mode in both editions) at 1200 px and 400 px, light and dark. Checks: title, no warnings, no horizontal scroll, the canvas is actually drawn (distinct-colour count), exploded and see-inside views, a section cut, Arrange showing one box per group with visible labels, no console errors. On the OpenSCAD demo at desktop/light, a value change and a full re-render.
   - Manifest editor, at desktop/light and phone/dark: opening it (the stage moves into the preview on desktop and still draws), Page edits applied as you type, the change list and count, Undo, Redo, Reset section, Esc and the stage moving back; no sideways scroll. Arrange edits appear in the editor's change list and undo. Parts (read-only id, material, group, source with its error messages), Groups (offset, Delete group and its undo), the up axis, Views (hide, add from camera, opens on), Finishes (recolour, add, make default) and the Spec sheet (rename, switch type, add section, change-list wording), each checked in the copied manifest. Reordering: arrow keys on a grip (focus stays with the moved item), a mouse drag of a part into another group and of a view to the front, group Move down, a finish moved by arrow key, a spec row moved by arrow key, and a touch drag (pointer events with `pointerType: 'touch'`) of a spec section to the top; the copied manifest's part, group, finish, view and spec order; Reset all restores the loaded order. Raw JSON: Edit manifest sits in the header; the box starts with the current manifest; broken JSON gives one problem with its line and Go to line selects it; an unknown part, a missing part, an unknown material and a 2-number `explode` are each explained, with the line; a good edit applies (title, material, explode, finish order) and shows in the change list and the box; one Undo reverts it; Paste, Format and Revert. Every section, Raw JSON included, on a phone in dark mode without sideways scroll.
-  - Embedding, with a test host on a second local server: load by URL, controls, coded errors, Arrange edit to `change`, `getManifest`; load by transferred bytes; rejection of hosts that aren't allowed; OpenSCAD `setValues` and `render`.
+  - `<mockup-embed>`, at desktop/light and phone/dark on a page of 20 (classic `embed.js` from a second server): the first goes live and draws with only its chosen controls; its link points at the full viewer; `load="click"` waits and starts on a click; `controls="none"` shows no strip; a missing manifest shows the error; no sideways scroll; never more than 8 live; after scrolling to the bottom, the top embeds hold a JPEG still and no iframe while the bottom ones are live.
+  - Compact mode at 600 × 340 in dark mode: only the stage and the chosen controls show, the starting mode, view and finish apply, the model draws, and the page fits its frame both ways; `controls=none` hides the strip.
+  - Embedding, with a test host on a second local server: load by URL, controls, a snapshot, coded errors, Arrange edit to `change`, `getManifest`; load by transferred bytes; rejection of hosts that aren't allowed; OpenSCAD `setValues` and `render`.
   - Screenshots go to `test-results/` and should be looked at.
   - `MOCKUP_TEST_CDN_DIR` serves three.js and fflate from a local folder for offline runs.
 - Rule: every visible feature gets a browser test.
@@ -364,13 +385,15 @@ The project's code is MIT. The OpenSCAD WebAssembly build is GPL-2.0-or-later: t
 - The manifest editor's section tabs scroll sideways inside their row on narrow phones.
 - Raw JSON can't add or remove parts, or remove a top-level field the loaded manifest has (page text and `defaultView` can be emptied instead; a removed `views` or `finishes` list means the defaults, a removed `spec` means none).
 - The editor tests run at desktop/light and phone/dark only, not every width and theme.
-- `?manifest=`, `?model=` and `?parent=` don't work inside Claude artifacts.
+- `?manifest=`, `?model=`, `?parent=` and `?embed` (with its options) don't work inside Claude artifacts.
 - The OpenSCAD edition needs http(s), not `file://`.
-- Browsers limit live WebGL contexts (roughly 16 per page), which matters for pages with many embeds (planned item 5).
+- Browsers limit live WebGL contexts (roughly 16 per page); `<mockup-embed>` keeps at most 8 live, and a released embed forgets how the reader turned or switched it.
+- An embed's first picture needs its 3D view to start once: there is no still before then (planned item 6 would give one from the build).
+- `<mockup-embed>` needs the viewer to allow the host page's origin (`?parent=`, added automatically); a viewer built with `--embed-origin` only works for the origins listed.
 
 ## 12. Planned work
 
-Roughly in priority order. When picking one up, check the notes, update this section in the same change, and add browser tests for anything visible. Numbers stay as first given, so references keep working: done items are removed and their behaviour moves into the sections above (2, editing the spec sheet and page text, and 4, the manifest editor, are both in section 6.11).
+Roughly in priority order. When picking one up, check the notes, update this section in the same change, and add browser tests for anything visible. Numbers stay as first given, so references keep working: done items are removed and their behaviour moves into the sections above (2, editing the spec sheet and page text, and 4, the manifest editor, are both in section 6.11; 5, the inline embed, is in sections 6.13 and 9.1).
 
 ### 1. Load models from a URL without a manifest
 - `viewer.html?file=stl/base.stl&file=stl/lid.stl` (repeatable). Each file becomes a part with automatic grouping, explode and materials.
@@ -388,27 +411,8 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
   - Embedded viewers: the host can already read the manifest (`change` event, `getManifest`). Should Save also post a `save` message to the host page (browser to browser, no server), or behave exactly as above?
 - **Tests:** browser tests for each path: the file picker (stubbed in the test), the download (Playwright captures it and the test checks the JSON), and the Copy fallback where both are unavailable.
 
-### 5. Simple inline embed (display only)
-A one-line way to put a small, read-only model view inside a document or page, like an image.
-- **Script tag + custom element:**
-  ```html
-  <script src="https://sirmeili.github.io/3d-mockup-viewer/embed.js"></script>
-  <mockup-embed src="mockup/manifest.json" height="320" controls="show,view,finish"></mockup-embed>
-  ```
-  Attributes:
-  - `src`: a manifest URL, or a single model file.
-  - `height`: default about 320 px. Width fills the container.
-  - `controls`: any of `show`, `view`, `finish`, `cut`, or `none`.
-  - `view` / `mode` / `finish`: the starting state.
-  - `link`: adds an "Open full viewer" link.
-- **Iframe fallback** for pages that don't allow scripts: `viewer.html?embed&manifest=…`.
-- **Compact mode:** model only, with a slim control strip (Show, View, Finish swatches) overlaid or below. Drag to rotate, scroll or pinch to zoom. No header, parts list, spec sheet, Arrange, editor or Load files. Respects the page's light/dark mode.
-- **Many embeds on a page:** browsers cap live WebGL contexts at roughly 16. Show a still preview until the embed scrolls into view or is clicked, then start the 3D view. Release contexts that scroll far away.
-- **Static fallback for places that strip scripts** (e.g. GitHub READMEs): have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer.
-- **Shares plumbing with the embedding API**, the full two-way version. Reuse its viewer-side pieces. Note that today's `embed.js` is an ES module, while the snippet above loads it as a classic script; resolve that (two builds, or a module script tag) when building this.
-- Left over from the embedding API: an optional `<mockup-viewer manifest="…">` custom element wrapping `embedViewer`. Build it alongside `<mockup-embed>` if it's still wanted.
-- **Tests:** a test page with several embeds (desktop and phone, light and dark), checking that each draws, controls work, off-screen embeds stay as stills, and nothing scrolls sideways.
-- **Docs:** add a section to `docs/embedding.md`.
+### 6. Static image of a mockup (for places that strip scripts)
+Have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer, e.g. in a GitHub README. Node has no WebGL, so decide first how to render: a small software rasterizer in Node (no new dependency, plainer look) or headless Chromium through Playwright when installed (exact match, optional dependency and browser download). Split out of item 5 on 2026-10-24.
 
 ### Outside this repository
 - **Tracker integration** (`ai-project-tracker`): decide where a project's mockup lives and how an item shows one, then use the embedding API. The tracker has no mockup or file storage yet; this belongs in its own backlog.

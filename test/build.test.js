@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildMockup, renderPage, renderPart, toBinaryStl, triangleCount, scadLiteral } from '../lib/index.js';
+import vm from 'node:vm';
+import { buildMockup, renderPage, renderPart, toBinaryStl, triangleCount, scadLiteral, classicEmbed } from '../lib/index.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mockup-test-'));
@@ -68,4 +69,15 @@ test('embed origins are written into the page; embedding is off by default', () 
   const html = renderPage({ data: null, embedOrigins: ['https://tracker.lan/some/path', 'http://localhost:5173'] });
   assert.match(html, /<meta name="mockup-embed-origins" content="https:\/\/tracker\.lan http:\/\/localhost:5173">/);
   assert.throws(() => renderPage({ data: null, embedOrigins: ['javascript:alert(1)'] }), /http or https/);
+});
+
+test('the embed helper converts to a classic script', () => {
+  const js = classicEmbed();
+  assert.doesNotThrow(() => new vm.Script(js), 'parses as a classic script');
+  assert.doesNotMatch(js, /^\s*(export|import)\b|import\.meta/m);
+  const win = { customElements: undefined };
+  vm.runInNewContext(js, { window: win, document: { currentScript: { src: 'https://example.test/embed.js' } }, location: { href: 'https://example.test/' } });
+  assert.equal(typeof win.mockupViewer.embedViewer, 'function', 'exports land on window.mockupViewer');
+  assert.equal(win.mockupViewer.PROTOCOL, 'mockup-viewer');
+  assert.throws(() => classicEmbed('export default 1;'), /module syntax/);
 });

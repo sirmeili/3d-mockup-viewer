@@ -1,13 +1,55 @@
 # Embedding the viewer in another app
 
-A host page can put the viewer in an iframe and drive it with `postMessage`: load a model, switch views, open Arrange, and get the edited manifest back. The helper `embed.js` wraps the messages in a small promise API.
+Two ways to put a mockup in another page:
+
+- **[`<mockup-embed>`](#inline-embeds-mockup-embed)**: one line, display only, like an image. Many can share a page.
+- **The embedding API**: a host page puts the full viewer in an iframe and drives it with `postMessage`: load a model, switch views, open Arrange, and get the edited manifest back. The helper `embedViewer` wraps the messages in a small promise API.
+
+Both come from the same helper. It is published three ways: `dist/embed.js`, a classic script for `<script src>` that puts everything on `window.mockupViewer`; `dist/embed.mjs`, the same code as an ES module; and the npm export `3d-mockup-viewer/embed` (the module).
 
 Embedding is **off by default**. A viewer page only listens to a parent frame whose origin you allowed, so the published Claude artifacts and ordinary mockup pages are unaffected.
 
-## Quick start
+## Inline embeds: `<mockup-embed>`
+
+```html
+<script src="https://sirmeili.github.io/3d-mockup-viewer/embed.js"></script>
+<mockup-embed src="mockup/manifest.json" height="320" controls="show,view,finish" link></mockup-embed>
+```
+
+The element shows the viewer's compact mode (`viewer.html?embed`): the model and a slim strip of controls, with drag to rotate and scroll or pinch to zoom. No header, parts list, spec sheet, Arrange, editor or Load files. It is display only; edits aren't possible.
+
+| Attribute | Default | Meaning |
+|---|---|---|
+| `src` | required | Manifest URL, relative to the page. A single model file will work once `?file=` loading exists (planned item 1). |
+| `height` | `320` | Height in px (a plain number) or any CSS length. The width fills the container. |
+| `controls` | `show,view,finish` | Any of `show`, `view`, `finish`, `cut`, comma-separated, or `none`. |
+| `view`, `mode`, `finish` | as the manifest says | Starting camera view (a view name such as `top`), `assembled`, `exploded` or `inside`, and a finish name or colour. |
+| `theme` | the system setting | `light` or `dark`, for the element and the view inside it. |
+| `link` | off | Adds an "Open full viewer" link below the view (to `viewer.html?manifest=…`), or to the URL you give it. |
+| `load` | starts when near | `click`: wait for a click instead of starting when it scrolls near. |
+| `title` | `3D model` | Name for screen readers. |
+| `viewer` | `viewer.html` beside the script | The viewer page to use, for a viewer hosted somewhere else. |
+
+**Many on one page.** Browsers cap live 3D views (WebGL contexts) at roughly 16 per page, so:
+- An embed starts its 3D view when it comes within 200 px of the viewport (or when clicked, with `load="click"`). Until then it shows a "Show 3D view" button.
+- Once started, it keeps a still of itself. When it is more than 1200 px from the viewport it swaps to the still and frees its 3D view; scrolling back starts it again.
+- At most 8 embeds are live at once; another one starting frees the one farthest from view.
+- A view the reader turned or switched isn't kept when an embed is freed; it starts again from its attributes.
+
+**Origins.** The element uses the embedding API to take its stills, adding `?parent=<this page's origin>` to the viewer URL, so the viewer must allow this page (any origin can, unless the viewer was built with `--embed-origin`; see [Allowing a host](#allowing-a-host)). The manifest and part files are fetched by the viewer, so they need to be reachable from the viewer's origin.
+
+**Without scripts.** Where scripts aren't allowed but iframes are, use the compact viewer directly:
+
+```html
+<iframe src="viewer.html?embed&manifest=mockup/manifest.json&controls=show,view" style="width:100%;height:320px;border:0" title="3D model"></iframe>
+```
+
+Query strings don't reach pages inside Claude artifacts, so compact mode and `<mockup-embed>` need a self-hosted viewer (GitHub Pages or your own site).
+
+## Quick start (embedding API)
 
 ```js
-import { embedViewer } from '3d-mockup-viewer/embed';   // or dist/embed.js, served next to your page
+import { embedViewer } from '3d-mockup-viewer/embed';   // or dist/embed.mjs; with the classic dist/embed.js, window.mockupViewer.embedViewer
 
 const viewer = embedViewer(document.getElementById('model'), { src: '/mockup/viewer.html', height: '600px' });
 
@@ -56,6 +98,7 @@ Every command method returns a promise. It resolves with the viewer's result, or
 | `setCut(axis, position?)` | `axis`: `'off'`, `'x'`, `'y'` or `'z'`. `position`: 0 to 1 across the model (default: unchanged, 0.5 at first). |
 | `setArrange(on)` | Opens or closes Arrange. |
 | `getManifest()` | The full current manifest, including Arrange edits: what **Copy manifest** produces. |
+| `snapshot()` | A still of the current view: `{ image, width, height }`, where `image` is a JPEG data URL (the model over the stage's background) and the size is in device pixels. |
 | `scad.setValues({ name: value })` | OpenSCAD edition. Sets editable top-level values. Numbers, booleans and strings must match each value's type. It's all or nothing: one bad name or type and nothing changes. Resolves with `{ values }`, every current value. Doesn't render. |
 | `scad.render()` | OpenSCAD edition. Re-renders every part with the current values. Resolves with a model summary. |
 | `send(type, body)` | Sends a raw message (see [Protocol](#protocol)). |
@@ -106,7 +149,7 @@ URL strings are resolved against the host page before they are sent, so `load('m
 
 ## Protocol
 
-For hosts that don't use `embed.js`. Every message is a plain object with `protocol: 'mockup-viewer'` and `version: 1`. The viewer ignores messages without them.
+For hosts that don't use the helper. Every message is a plain object with `protocol: 'mockup-viewer'` and `version: 1`. The viewer ignores messages without them.
 
 Host → viewer, posted to the iframe's `contentWindow` with the viewer's origin as `targetOrigin`:
 
@@ -114,7 +157,7 @@ Host → viewer, posted to the iframe's `contentWindow` with the viewer's origin
 { protocol: 'mockup-viewer', version: 1, id: 7, type: 'setMode', mode: 'exploded' }
 ```
 
-`type` is one of `load`, `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `scad.setValues` or `scad.render`. The arguments are fields next to it, named as in the helper: `manifest`, `files`, `base`, `mode`, `view`, `finish`, `axis`, `position`, `on`, `values`. `id` is optional; without one, no reply is sent.
+`type` is one of `load`, `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `snapshot`, `scad.setValues` or `scad.render`. The arguments are fields next to it, named as in the helper: `manifest`, `files`, `base`, `mode`, `view`, `finish`, `axis`, `position`, `on`, `values`. `id` is optional; without one, no reply is sent.
 
 Viewer → host replies:
 
@@ -130,5 +173,5 @@ A breaking change to the protocol increases `version`. The viewer answers a diff
 ## Notes
 
 - Arrange edits are still remembered in the viewer's browser storage per model, as they are when the viewer isn't embedded. `getManifest()` and `change` include them, so the host can save the manifest and later reload it with the edits built in.
-- The viewer shows its normal page, header and spec sheet included. A compact display-only embed is planned separately ([SPEC.md](SPEC.md), planned work item 5).
+- The viewer shows its normal page, header and spec sheet included. For a compact display-only view, use `<mockup-embed>` or `viewer.html?embed`.
 - Query strings don't reach pages inside Claude artifacts, so the published artifacts can't be embedded this way.
