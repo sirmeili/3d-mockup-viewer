@@ -172,6 +172,70 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 .sheet p { margin: 0; max-width: 62ch; }
 .foot { font-size: 12.5px; color: var(--muted); margin: 0; }
 .foot code { font-family: var(--font-mono); font-size: 12px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn.icon { padding: 7px; }
+.btn.small { padding: 5px 9px; font-size: 12.5px; }
+
+/* Manifest editor: a modal dialog with the section list, the section being edited, and the live preview with the change list.
+   On phones it fills the screen, the section list becomes tabs and the preview is left out. */
+.ed {
+  width: min(1200px, calc(100vw - 32px)); max-width: none; height: min(880px, calc(100vh - 32px)); max-height: none;
+  padding: 0; border: 0; border-radius: 14px; background: var(--surface); color: var(--fg);
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--edge) 35%, transparent);
+}
+.ed[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.ed::backdrop { background: color-mix(in srgb, var(--edge) 50%, transparent); }
+.ed-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.ed-head h2 { font: 700 20px/1.2 var(--font-display); margin: 0; }
+.ed-sub { font: 12.5px var(--font-mono); color: var(--muted); margin: 2px 0 0; overflow-wrap: anywhere; }
+.ed-body { display: grid; grid-template-columns: 200px minmax(0, 1fr) 300px; min-height: 0; }
+.ed-nav { border-right: 1px solid var(--line); padding: 12px 10px; display: grid; align-content: start; gap: 2px; background: var(--bg); overflow: auto; }
+.ed-nav button {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; font: 14px var(--font-body); color: var(--fg);
+  background: transparent; border: 0; border-radius: 8px; padding: 9px 12px; text-align: left; cursor: pointer;
+}
+.ed-nav button:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ed-nav button[aria-current="true"] { background: color-mix(in srgb, var(--accent) 16%, transparent); font-weight: 600; }
+.ed-nav .count { font: 11.5px var(--font-mono); color: var(--muted); }
+.ed-main { padding: 18px 22px; overflow: auto; display: grid; align-content: start; gap: 16px; min-width: 0; }
+.ed-main h3 { font: 600 18px var(--font-display); margin: 0; }
+.ed-help {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; max-width: 72ch; font-size: 14px;
+}
+.ed-help p { margin: 0; }
+.ed-help b { font-weight: 600; }
+.ed-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 16px; }
+.ed-fields .wide { grid-column: 1 / -1; }
+.ed .fld:focus-within { outline: none; }
+.ed input[type="text"], .ed select {
+  font: 13.5px/1.3 var(--font-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px 8px; width: 100%; box-sizing: border-box; min-width: 0;
+}
+.ed-aside { border-left: 1px solid var(--line); padding: 16px; display: grid; align-content: start; gap: 12px; background: var(--bg); overflow: auto; }
+.ed-aside .stage { aspect-ratio: 4 / 3; min-height: 0; max-height: none; }
+.ed-aside .stage .hint { display: none; }
+.ed-changes { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 6px; }
+.ed-changes .phead { margin: 0; }
+.ed-changes ul { margin: 0; padding-left: 16px; font-size: 13px; display: grid; gap: 3px; overflow-wrap: anywhere; }
+.ed-changes ul:empty { display: none; }
+.ed-changes p { margin: 0; font-size: 13px; color: var(--muted); }
+.ed-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--bg); }
+.ed-foot > div { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ed-foot .note { font-size: 13px; color: var(--muted); margin: 0; }
+.ed-copy-note { flex-basis: 100%; }
+.ed-copy-note:empty { display: none; }
+.ed-foot .arr-json { margin: 0; min-height: 120px; }
+@media (max-width: 760px) {
+  .ed { width: 100%; height: 100%; inset: 0; margin: 0; border-radius: 0; }
+  .ed-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .ed-nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 6px 8px; }
+  .ed-nav button { flex: none; }
+  .ed-nav .count { display: none; }
+  .ed-aside { display: none; }
+  .ed-head, .ed-main, .ed-foot { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+}
 </style>
 
 <div class="wrap">
@@ -234,6 +298,10 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
           <button class="btn" type="button" id="arrReset" hidden>Reset</button>
           <button class="btn" type="button" id="arrCopy" hidden>Copy manifest</button>
           <button class="btn" type="button" id="arrToggle" aria-pressed="false">Arrange</button>
+          <button class="btn" type="button" id="edOpen" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/></svg>
+            Edit manifest
+          </button>
         </div>
       </div>
       <p class="arr-note" id="arrNote" role="status"></p>
@@ -244,6 +312,45 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   </div>
   <p class="foot" id="foot">Units are millimetres unless the model says otherwise. Front faces −Y in Z-up models, the OpenSCAD convention.</p>
 </div>
+
+<dialog class="ed" id="editor" aria-labelledby="edTitle">
+  <div class="ed-head">
+    <div>
+      <h2 id="edTitle">Manifest editor</h2>
+      <p class="ed-sub" id="edSub"></p>
+    </div>
+    <button class="btn icon" type="button" id="edClose" aria-label="Close editor">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="ed-body">
+    <nav class="ed-nav" id="edNav" aria-label="Manifest sections"></nav>
+    <div class="ed-main" id="edMain"></div>
+    <aside class="ed-aside" id="edAside" aria-label="Preview and changes">
+      <span class="fl">Live preview</span>
+      <div id="edPreview"></div>
+      <div class="ed-changes">
+        <div class="phead"><span class="fl" id="edChangesTitle">Changes</span><button class="btn small" type="button" id="edResetAll" hidden>Reset all</button></div>
+        <ul id="edChanges"></ul>
+        <p id="edNoChanges">No changes from the loaded manifest.</p>
+      </div>
+    </aside>
+  </div>
+  <div class="ed-foot">
+    <div>
+      <button class="btn" type="button" id="edUndo" disabled>Undo</button>
+      <button class="btn" type="button" id="edRedo" disabled>Redo</button>
+      <span class="note" id="edCount" role="status"></span>
+    </div>
+    <div>
+      <button class="btn" type="button" id="edResetSection">Reset section</button>
+      <button class="btn" type="button" id="edCopy">Copy manifest</button>
+      <button class="btn primary" type="button" id="edDone">Done</button>
+    </div>
+    <p class="note ed-copy-note" id="edNote" role="status"></p>
+    <textarea id="edJson" class="arr-json" readonly hidden aria-label="Manifest JSON"></textarea>
+  </div>
+</dialog>
 
 <!-- EDITION-SLOT -->
 <!-- MOCKUP-DATA: the build script replaces the contents of this tag. Shape: {"manifest":{…},"files":{"name.stl":"<base64>"},"dropIn":true|false} -->
@@ -522,7 +629,6 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const fileNames = Object.keys(files);
     const hasGLB = fileNames.some((f) => ext(f) === 'glb');
     state.up = mf.up || (hasGLB && !fileNames.some((f) => /\.(stl|3mf)$/i.test(f)) ? 'y' : 'z');
-    state.units = mf.units || 'mm';
     root.rotation.set(state.up === 'z' ? -Math.PI / 2 : 0, 0, 0);
     if (mf.finishes && mf.finishes.length) finishHex = mf.finishes[0].color.toLowerCase();
 
@@ -582,13 +688,11 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
     state.signature = state.parts.map((p) => p.id).sort().join('|');
     state.edits = loadEdits();
+    if (edHistory.key !== editsKey()) resetHistory();
     arrange();
     state.radius = box.getBoundingSphere(new THREE.Sphere()).radius;
 
-    // dims tag
-    const dims = state.up === 'z' ? [size.x, size.y, size.z] : [size.x, size.z, size.y];
-    const fmt = (v) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
-    $('dims').textContent = dims.map(fmt).join(' × ') + ' ' + state.units;
+    updateDims();
     $('dims').hidden = false;
     $('loading').hidden = true;
 
@@ -665,20 +769,60 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     renderParts();
   }
 
-  // local edits, remembered per set of parts in this browser
+  // Local edits on top of the loaded manifest, shared by Arrange and the manifest editor and remembered
+  // per set of parts in this browser: {parts: {id: patch}, groups: {id: patch}, page: {field: value}}
+  const EDIT_KEYS = ['parts', 'groups', 'page'];
   function editsKey() { return 'mockupEdits:' + (state.manifest.name || '') + ':' + state.signature; }
+  function normEdits(e) {
+    const out = {};
+    EDIT_KEYS.forEach((k) => { out[k] = e && e[k] && typeof e[k] === 'object' && !Array.isArray(e[k]) ? e[k] : {}; });
+    return out;
+  }
   function loadEdits() {
     let e = null;
     try { e = JSON.parse(localStorage.getItem(editsKey()) || 'null'); } catch (err) { e = null; }
-    return e && e.parts && e.groups ? e : { parts: {}, groups: {} };
+    return normEdits(e);
   }
+  function editsEmpty(e) { return EDIT_KEYS.every((k) => !Object.keys(e[k]).length); }
   function saveEdits() {
-    const empty = !Object.keys(state.edits.parts).length && !Object.keys(state.edits.groups).length;
-    try { if (empty) localStorage.removeItem(editsKey()); else localStorage.setItem(editsKey(), JSON.stringify(state.edits)); } catch (err) { /* storage unavailable */ }
+    try { if (editsEmpty(state.edits)) localStorage.removeItem(editsKey()); else localStorage.setItem(editsKey(), JSON.stringify(state.edits)); } catch (err) { /* storage unavailable */ }
     hostChanged();
+    edChanged();
   }
-  function editPart(id, patch) { state.edits.parts[id] = Object.assign({}, state.edits.parts[id], patch); saveEdits(); arrange(); }
-  function editGroup(id, patch) { state.edits.groups[id] = Object.assign({}, state.edits.groups[id], patch); saveEdits(); arrange(); }
+
+  // Undo history: snapshots of the edits. Steps with the same key close together (typing in one field) count as one.
+  const edHistory = { key: null, undo: [], redo: [], lastStep: null, lastAt: 0 };
+  function resetHistory() { edHistory.key = editsKey(); edHistory.undo = []; edHistory.redo = []; edHistory.lastStep = null; }
+  function recordEdit(step, before) {
+    const now = Date.now();
+    if (step && step === edHistory.lastStep && now - edHistory.lastAt < 1500) { edHistory.lastAt = now; return; }
+    edHistory.undo.push(before || JSON.stringify(state.edits));
+    if (edHistory.undo.length > 200) edHistory.undo.shift();
+    edHistory.redo = []; edHistory.lastStep = step || null; edHistory.lastAt = now;
+  }
+  // every edit goes through here: change, record, remember, redraw; an edit that changes nothing is dropped
+  function applyEdit(step, fn) {
+    const before = JSON.stringify(state.edits);
+    fn(state.edits);
+    if (JSON.stringify(state.edits) === before) return;
+    recordEdit(step, before); saveEdits(); refreshFromEdits();
+  }
+  function restoreEdits(json) { state.edits = normEdits(JSON.parse(json)); edHistory.lastStep = null; saveEdits(); refreshFromEdits(); }
+  function undo() { if (!edHistory.undo.length) return; edHistory.redo.push(JSON.stringify(state.edits)); restoreEdits(edHistory.undo.pop()); edRender(); }
+  function redo() { if (!edHistory.redo.length) return; edHistory.undo.push(JSON.stringify(state.edits)); restoreEdits(edHistory.redo.pop()); edRender(); }
+  function refreshFromEdits() { arrange(); renderHeader(); updateDims(); renderSheet(); }
+  function editPart(id, patch) { applyEdit(null, (ed) => { ed.parts[id] = Object.assign({}, ed.parts[id], patch); }); }
+  function editGroup(id, patch) { applyEdit(null, (ed) => { ed.groups[id] = Object.assign({}, ed.groups[id], patch); }); }
+
+  // page fields with edits applied
+  function pageInfo() { return Object.assign({}, state.manifest, state.edits.page); }
+  function units() { return pageInfo().units || 'mm'; }
+  function updateDims() {
+    const s = state.assembledBox.getSize(new THREE.Vector3());
+    const dims = state.up === 'z' ? [s.x, s.y, s.z] : [s.x, s.z, s.y];
+    const fmt = (v) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
+    $('dims').textContent = dims.map(fmt).join(' × ') + ' ' + units();
+  }
 
   // ---------- views ----------
   const STOCK_VIEWS = { // world coords: +Y up, +Z toward the viewer's front
@@ -877,6 +1021,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
           ax.append(el('span', axis.toUpperCase()));
           axes.append(ax);
           ax.append(numInput('g-ex-' + axis + '-' + g.id, g.explode.getComponent(ai), (v) => {
+            recordEdit('explode:' + g.id + ':' + axis);
             g.explode.setComponent(ai, v); g.autoExplode = false;
             state.edits.groups[g.id] = Object.assign({}, state.edits.groups[g.id], { explode: g.explode.toArray().map((n) => Math.round(n * 10) / 10) });
             saveEdits();
@@ -919,8 +1064,10 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
             if (gs.value === '__new') {
               let n = 1; while (state.groups.has('group-' + n)) n++;
               const gid = 'group-' + n;
-              state.edits.groups[gid] = Object.assign({}, state.edits.groups[gid], { label: 'Group ' + n });
-              editPart(p.id, { group: gid });
+              applyEdit(null, (ed) => {
+                ed.groups[gid] = Object.assign({}, ed.groups[gid], { label: 'Group ' + n });
+                ed.parts[p.id] = Object.assign({}, ed.parts[p.id], { group: gid });
+              });
             } else editPart(p.id, { group: gs.value });
           });
           const ms = document.createElement('select'); ms.id = 'p-mat-' + p.id; ms.setAttribute('aria-label', 'Material for ' + p.name);
@@ -954,6 +1101,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function currentManifest() {
     const mf = state.manifest;
     const out = JSON.parse(JSON.stringify(mf || {}));
+    Object.assign(out, JSON.parse(JSON.stringify(state.edits.page)));
     const baseParts = {}; (mf.parts || []).forEach((p) => { baseParts[p.id] = p; });
     out.up = state.up;
     out.parts = state.parts.map((p) => {
@@ -970,16 +1118,16 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     });
     return out;
   }
-  async function copyManifest() {
+  // note and box: where to report, and the text box shown when the clipboard is blocked
+  async function copyManifest(note, box) {
     const json = JSON.stringify(currentManifest(), null, 2);
-    const box = $('arrJson');
     box.value = json;
     try {
       await navigator.clipboard.writeText(json);
-      $('arrNote').textContent = 'Copied. Save it as manifest.json next to your part files, then load them together.';
+      note.textContent = 'Copied. Save it as manifest.json next to your part files, then load them together.';
       box.hidden = true;
     } catch (e) {
-      $('arrNote').textContent = 'Copy is blocked here. Select the text below and copy it, then save it as manifest.json.';
+      note.textContent = 'Copy is blocked here. Select the text below and copy it, then save it as manifest.json.';
       box.hidden = false; box.focus(); box.select();
     }
   }
@@ -992,8 +1140,144 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     $('arrJson').hidden = true;
     renderParts();
   }
-  $('arrCopy').addEventListener('click', copyManifest);
-  $('arrReset').addEventListener('click', () => { state.edits = { parts: {}, groups: {} }; saveEdits(); arrange(); $('arrNote').textContent = 'Back to the original arrangement.'; });
+  $('arrCopy').addEventListener('click', () => copyManifest($('arrNote'), $('arrJson')));
+  $('arrReset').addEventListener('click', () => {
+    applyEdit(null, (ed) => { ed.parts = {}; ed.groups = {}; });
+    $('arrNote').textContent = 'Back to the original arrangement.';
+  });
+
+  // ---------- manifest editor (dialog) ----------
+  // Each section: what it controls and how to use it (shown at its top), an optional count for the section list,
+  // how to draw it, and what Reset section clears. Edits go through applyEdit, like Arrange's.
+  const PAGE_FIELDS = [['name', 'Title', ''], ['subtitle', 'Subtitle', ''], ['eyebrow', 'Eyebrow', '3D mockup'], ['units', 'Units', 'mm']];
+  const ED_SECTIONS = [
+    {
+      id: 'page', title: 'Page',
+      help: ['The text around the model: the small eyebrow line above the title, the title, and the line under it. Units appear after the overall size and in the spec sheet.',
+        'type in a field and the page changes as you type. An empty title shows "Loaded model", an empty eyebrow shows "3D mockup", and an empty subtitle is hidden.'],
+      render: edPageSection,
+      reset: (ed) => { ed.page = {}; }
+    }
+  ];
+  let edSection = 'page';
+  const stageSpot = document.createComment('stage');
+  const wideEditor = window.matchMedia('(min-width: 761px)');
+
+  function openEditor() {
+    if (!state.parts.length) return;
+    $('edNote').textContent = ''; $('edJson').hidden = true;
+    // the live preview is the viewer's own 3D stage, moved into the dialog while it is open
+    if (wideEditor.matches) { stage.parentNode.insertBefore(stageSpot, stage); $('edPreview').appendChild(stage); }
+    $('editor').showModal();
+    edRender();
+  }
+  $('editor').addEventListener('close', () => {
+    if (stageSpot.parentNode) { stageSpot.parentNode.insertBefore(stage, stageSpot); stageSpot.remove(); }
+    $('edOpen').focus();
+  });
+  $('edOpen').addEventListener('click', openEditor);
+  $('edClose').addEventListener('click', () => $('editor').close());
+  $('edDone').addEventListener('click', () => $('editor').close());
+  $('edUndo').addEventListener('click', undo);
+  $('edRedo').addEventListener('click', redo);
+  $('edCopy').addEventListener('click', () => copyManifest($('edNote'), $('edJson')));
+  $('edResetSection').addEventListener('click', () => { applyEdit(null, edCurrent().reset); edRender(); });
+  $('edResetAll').addEventListener('click', () => { applyEdit(null, (ed) => { EDIT_KEYS.forEach((k) => { ed[k] = {}; }); }); edRender(); });
+
+  function edCurrent() { return ED_SECTIONS.find((s) => s.id === edSection) || ED_SECTIONS[0]; }
+  // redraw everything in the dialog (open, section switch, undo, reset, new model)
+  function edRender() {
+    if (!$('editor').open) return;
+    const nav = $('edNav'); nav.textContent = '';
+    ED_SECTIONS.forEach((s) => {
+      const b = document.createElement('button'); b.type = 'button'; b.id = 'ed-nav-' + s.id;
+      b.setAttribute('aria-current', String(s.id === edSection));
+      const c = el('span'); c.className = 'count'; c.id = 'ed-count-' + s.id;
+      b.append(el('span', s.title), c);
+      b.addEventListener('click', () => { edSection = s.id; edRender(); });
+      nav.appendChild(b);
+    });
+    const sec = edCurrent();
+    const host = $('edMain'); host.textContent = '';
+    const help = el('div'); help.className = 'ed-help';
+    const how = el('p'); how.append(el('b', 'How to use: '), sec.help[1]);
+    help.append(el('p', sec.help[0]), how);
+    host.append(el('h3', sec.title), help);
+    sec.render(host);
+    edChanged();
+  }
+  // refresh the parts that follow every edit, leaving the field being typed in alone
+  function edChanged() {
+    if (!$('editor').open) return;
+    $('edSub').textContent = (pageInfo().name || 'Loaded model') + ' · ' + state.parts.length + (state.parts.length === 1 ? ' part' : ' parts');
+    const list = editChanges();
+    ED_SECTIONS.forEach((s) => {
+      const n = list.filter((c) => c.section === s.id).length;
+      const c = $('ed-count-' + s.id);
+      if (c) c.textContent = [s.count ? s.count() : '', n ? n + ' changed' : ''].filter(Boolean).join(' · ');
+    });
+    const ul = $('edChanges'); ul.textContent = '';
+    list.forEach((c) => ul.appendChild(el('li', c.text)));
+    $('edChangesTitle').textContent = list.length ? 'Changes (' + list.length + ')' : 'Changes';
+    $('edNoChanges').hidden = list.length > 0;
+    $('edResetAll').hidden = !list.length;
+    $('edCount').textContent = list.length ? list.length + (list.length === 1 ? ' change' : ' changes') + ' from the loaded manifest' : 'No changes';
+    $('edUndo').disabled = !edHistory.undo.length;
+    $('edRedo').disabled = !edHistory.redo.length;
+  }
+
+  function edPageSection(host) {
+    const grid = el('div'); grid.className = 'ed-fields';
+    const mf = pageInfo();
+    PAGE_FIELDS.forEach(([k, label, dflt]) => {
+      const i = document.createElement('input'); i.type = 'text'; i.id = 'ed-page-' + k; i.value = mf[k] || '';
+      i.placeholder = dflt;
+      i.addEventListener('input', () => applyEdit('page:' + k, (ed) => {
+        if (i.value === (state.manifest[k] || '')) delete ed.page[k]; else ed.page[k] = i.value;
+      }));
+      const f = fld(label, i, true);
+      if (k === 'subtitle') f.classList.add('wide');
+      grid.appendChild(f);
+    });
+    host.appendChild(grid);
+  }
+
+  // what differs from the loaded manifest, in words, for the change list and the section counts
+  const INSIDE_LABELS = { none: 'Stays', ghost: 'Ghosted', hide: 'Hidden' };
+  function editChanges() {
+    const ed = state.edits, mf = state.manifest, out = [];
+    const add = (section, text) => out.push({ section, text });
+    const q = (v) => (v === undefined || v === '' ? '(empty)' : '"' + v + '"');
+    const mat = (k) => MAT_LABELS[k] || k;
+    const groupLabel = (gid) => (state.groups.get(gid) || {}).label || (mf.groups && mf.groups[gid] && mf.groups[gid].label) || prettyName(gid);
+    PAGE_FIELDS.forEach(([k, label, dflt]) => {
+      if (k in ed.page && ed.page[k] !== (mf[k] || '')) add('page', label + ': ' + q(mf[k] || dflt) + ' → ' + q(ed.page[k] || dflt));
+    });
+    state.parts.forEach((p) => {
+      const e = ed.parts[p.id];
+      if (!e) return;
+      if (e.name !== undefined && e.name !== p.baseName) add('parts', p.baseName + ' renamed to ' + e.name);
+      if (e.group !== undefined && e.group !== p.baseGroup) add('parts', p.name + ': ' + groupLabel(p.baseGroup) + ' → ' + groupLabel(e.group));
+      if (e.material !== undefined && e.material !== p.baseMat) add('parts', p.name + ': ' + mat(p.baseMat) + ' → ' + mat(e.material));
+    });
+    Object.keys(ed.groups).forEach((gid) => {
+      const g = state.groups.get(gid);
+      if (!g) return; // no parts in it any more
+      const e = ed.groups[gid], base = (mf.groups && mf.groups[gid]) || {};
+      const first = state.parts.find((p) => p.baseGroup === gid);
+      if (!first && !(mf.groups && mf.groups[gid])) { add('groups', 'New group ' + q(g.label)); return; }
+      const baseLabel = base.label || (first && first.id === gid && !first.namedGroup ? first.baseName : prettyName(gid));
+      if (e.label !== undefined && e.label !== baseLabel) add('groups', baseLabel + ' renamed to ' + e.label);
+      if (e.explode) {
+        if (Array.isArray(base.explode)) {
+          const d = ['X', 'Y', 'Z'].map((a, i) => (+base.explode[i] || 0) !== e.explode[i] ? a + ' ' + (+base.explode[i] || 0) + ' → ' + e.explode[i] : '').filter(Boolean);
+          if (d.length) add('groups', g.label + ': explode ' + d.join(', '));
+        } else add('groups', g.label + ': explode set to ' + e.explode.join(', '));
+      }
+      if (e.inside !== undefined && e.inside !== base.inside) add('groups', g.label + ': see inside ' + (INSIDE_LABELS[base.inside] || 'automatic') + ' → ' + INSIDE_LABELS[e.inside]);
+    });
+    return out;
+  }
   function highlight(p, on) {
     const m = p.mesh.material;
     if (!m.emissive) return;
@@ -1016,14 +1300,19 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       .forEach((r) => { dl.appendChild(el('dt', r[0])); dl.appendChild(el('dd', r[1])); });
     s.appendChild(dl); host.appendChild(s);
   }
-  function renderPanels() {
-    const mf = state.manifest;
+  function renderHeader() {
+    const mf = pageInfo();
     $('title').textContent = mf.name || (state.parts.length ? 'Loaded model' : '3D Mockup Viewer');
     $('subtitle').textContent = mf.subtitle || '';
     $('subtitle').hidden = !mf.subtitle;
     $('eyebrow').textContent = mf.eyebrow || '3D mockup';
     if (mf.name && !dropIn) document.title = mf.name;
+  }
+  function renderPanels() {
+    renderHeader();
     buildFinishes(); renderParts(); renderSheet();
+    $('edOpen').disabled = !state.parts.length;
+    if ($('editor').open) edRender();
   }
 
   // ---------- loading ----------
@@ -1154,7 +1443,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     return {
       parts: state.parts.length,
       groups: Array.from(state.groups.values()).map((g) => ({ id: g.id, label: g.label, parts: g.parts.map((p) => p.id) })),
-      size, units: state.units, warnings: warnings.slice()
+      size, units: units(), warnings: warnings.slice()
     };
   }
   let hostBusy = false, changeTimer = null;

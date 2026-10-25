@@ -199,16 +199,30 @@ Lists parts by group, with a visibility checkbox, colour dot, name and triangle 
 Available on drop-in pages, and on any page while it is embedded. **Arrange** turns the Parts panel into an editor:
 - Per group: name, explode offset (X, Y, Z, marked "automatic" until set), and see-inside behaviour (Stays, Ghosted, Hidden).
 - Per part: name, group (including "New group…"), and material (presets, "From file" for GLB, or a custom colour).
-- Edits apply immediately and are remembered in this browser, keyed by the manifest name and the sorted set of part ids. **Reset** clears them. **Copy manifest** copies the full manifest (section 6.9), or shows it in a text box when the clipboard is blocked.
+- Edits apply immediately and are remembered in this browser (section 6.12). **Reset** clears Arrange's edits (parts and groups) and can be undone in the manifest editor. **Copy manifest** copies the full manifest (section 6.9), or shows it in a text box when the clipboard is blocked.
 - Fields have visible labels; on narrow screens each part's fields stack with their own captions.
 
 ### 6.9 The current manifest
-"Copy manifest", `getManifest` and the `change` event all produce the same thing: the loaded manifest with `up`, every part (`id`, `name`, `group`, `material`, and `file`, or `scad` in the OpenSCAD edition) and every group (`label`, `explode` rounded to 0.1, `inside` unless `none`), including Arrange edits. Other fields (views, finishes, spec, page text) pass through unchanged.
+"Copy manifest", `getManifest` and the `change` event all produce the same thing: the loaded manifest with `up`, every part (`id`, `name`, `group`, `material`, and `file`, or `scad` in the OpenSCAD edition) and every group (`label`, `explode` rounded to 0.1, `inside` unless `none`), including Arrange edits, plus the page text (`name`, `subtitle`, `eyebrow`, `units`) with manifest-editor edits. Other fields (views, finishes, spec) pass through unchanged.
 
 ### 6.10 Spec sheet
 One section per `spec` entry (definition list for `rows`, bullets for `items`, a paragraph for `text`), then a computed "Model data" section: overall size, part count, group count, triangle count.
 
-### 6.11 Messages and failure states
+### 6.11 Manifest editor
+**Edit manifest**, beside Arrange (same pages: drop-in and embedded; disabled until a model is loaded), opens a modal dialog (planned item 4, being built in phases; this describes what exists).
+- **Layout:** a header (title, model name and part count, close button), a section list, the section being edited, a side panel, and a footer. On screens wider than 760 px the side panel holds the live preview, which is the viewer's own 3D stage moved into the dialog while it is open and moved back on close, and the change list. At 760 px and below the dialog fills the screen, the section list becomes a row of tabs, and the side panel is left out.
+- **Sections:** each starts with a plain-language box saying what it controls and "How to use". The section list shows how many changes each section has. Built so far: **Page**: title (`name`), subtitle, eyebrow and units, applied to the page as you type.
+- **Change list:** every difference from the loaded manifest, in words ("Lid renamed to Top cover", "Lid: explode Z 44 → 48", "Units: "mm" → "in""), covering page, part and group edits, Arrange's included. **Reset all** clears every edit.
+- **Footer:** Undo and Redo, the change count, **Reset section**, **Copy manifest** (same output as Arrange's) and **Done**. Esc and the close button also close the dialog. Save comes with planned item 3.
+- Native `<dialog>` with `showModal()`: the rest of the page is inert while it is open, Esc closes it, and focus returns to the Edit manifest button.
+
+### 6.12 Edits, memory and undo
+- Arrange and the manifest editor share one set of edits layered on the loaded manifest: `{ parts: {id: {name, group, material}}, groups: {id: {label, explode, inside}}, page: {name, subtitle, eyebrow, units} }`. The loaded manifest itself is never changed; "the current manifest" (6.9) is the two combined.
+- Edits are remembered in `localStorage` under `mockupEdits:<manifest name>:<sorted part ids>`, and removed when empty. Edits saved before the `page` key existed still load.
+- **Undo history:** every edit records a snapshot of the edits first. Typing in one field (or one explode axis) within 1.5 seconds counts as one step, and an edit that changes nothing isn't recorded. Up to 200 steps. Undo and Redo are in the editor's footer and cover Arrange's edits too. History starts empty for each model and survives an OpenSCAD re-render of the same parts.
+- Each edit is remembered, redraws the model and panels, refreshes the editor's change list, and (when embedded) schedules the `change` event.
+
+### 6.13 Messages and failure states
 - The loading tag shows progress ("Loading model…", "Reading files…", "Rendering 9 parts…") and final failures.
 - Non-fatal problems (missing or unreadable files, skipped file types, OpenSCAD parts that failed) are listed in the warning line under the controls.
 - If three.js fails to load, the stage says so and nothing else runs.
@@ -279,7 +293,7 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 - **Off by default.** The viewer listens only when it is framed and its parent's origin is allowed: by `?parent=origin[,origin]`, or by the build-time list (`--embed-origin`), which, when set, makes `?parent=` ignored. Messages must come from `window.parent` with an allowed origin and carry `protocol: 'mockup-viewer'`.
 - **Protocol version 1.** Every message carries the version. A breaking change increases it, and the viewer answers other versions with a `version` error.
 - **Commands:** `load`, `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `scad.setValues`, `scad.render`. They run one at a time, in order, after the page's own model has loaded. Each reply is `{ ok: true, result }` or `{ ok: false, error: { code, message } }`.
-- **Events:** `ready` (after the initial load), `loaded` (after every build), `change` (400 ms after the last Arrange edit, with the full manifest), `error` (failures not caused by a command).
+- **Events:** `ready` (after the initial load), `loaded` (after every build), `change` (400 ms after the last edit in Arrange or the manifest editor, with the full manifest), `error` (failures not caused by a command).
 - **Credentials:** loads requested by a host allowed only through `?parent=` fetch with `credentials: 'omit'`, because anyone can frame the viewer with their own `?parent=`. With a build-time list, fetches send cookies as usual.
 - **The viewer UI stays complete when embedded**, and Arrange is available.
 - The helper `embedViewer` adds `?parent=`, waits for `ready` (default 30 seconds), resolves relative URLs against the host page, transfers ArrayBuffers, and turns replies into promises.
@@ -305,6 +319,7 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 - `npm test` (Node, about 2 seconds): builds the sample from OpenSCAD; builds the OpenSCAD edition with embedded sources; `text()` with the bundled fonts; OpenSCAD literals; ASCII-to-binary STL; the empty viewer's null data tag; embed origins in the page.
 - `npm run test:browser` (Playwright, about 6 minutes; needs a build and Chromium):
   - Every dist page (demo, OpenSCAD demo, URL mode in both editions) at 1200 px and 400 px, light and dark. Checks: title, no warnings, no horizontal scroll, the canvas is actually drawn (distinct-colour count), exploded and see-inside views, a section cut, Arrange showing one box per group with visible labels, no console errors. On the OpenSCAD demo at desktop/light, a value change and a full re-render.
+  - Manifest editor, at desktop/light and phone/dark: opening it (the stage moves into the preview on desktop and still draws), Page edits applied as you type, the change list and count, Undo, Redo, Reset section, Esc and the stage moving back; no sideways scroll. Also: Arrange edits appear in the editor's change list and undo, and the editor's Copy manifest output.
   - Embedding, with a test host on a second local server: load by URL, controls, coded errors, Arrange edit to `change`, `getManifest`; load by transferred bytes; rejection of hosts that aren't allowed; OpenSCAD `setValues` and `render`.
   - Screenshots go to `test-results/` and should be looked at.
   - `MOCKUP_TEST_CDN_DIR` serves three.js and fflate from a local folder for offline runs.
@@ -358,7 +373,7 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 - **Tests:** browser tests for each path: the file picker (stubbed in the test), the download (Playwright captures it and the test checks the JSON), and the Copy fallback where both are unavailable.
 
 ### 4. Manifest editor (full-screen dialog)
-**Status:** in progress on `feat/manifest-editor`, in four phases: (1) shared working manifest, Undo/Redo, change list, the dialog shell; (2) the sections; (3) drag-and-drop reordering; (4) Raw JSON.
+**Status:** in progress on `feat/manifest-editor`, in four phases: (1) shared working manifest, Undo/Redo, change list, the dialog shell; (2) the sections; (3) drag-and-drop reordering; (4) Raw JSON. **Phase 1 is done** (sections 6.11 and 6.12 describe it), including the Page section except the `up` axis, which needs the model rebuilt and comes with phase 2.
 
 **Design:** the "Mockup Viewer Roadmap Screens" canvas (https://claude.ai/artifact/VsKyA5omGhSTWbQmZJa6Qr), artboards "Editor: Parts & groups", "Editor: Spec sheet", "Editor: Views & finishes", "Editor: Raw JSON with validation" and "Manifest editor on a phone". The canvas uses the old TODO numbers (it calls this item 5). Its main-viewer Save menu, which offers saving through `mockup serve --writable`, is superseded by item 3.
 

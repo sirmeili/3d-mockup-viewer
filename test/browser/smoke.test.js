@@ -149,6 +149,85 @@ for (const pg of PAGES) {
   }
 }
 
+// ---------- manifest editor ----------
+async function openDemo(vp, scheme, extra = {}) {
+  const ctx = await browser.newContext(Object.assign({ viewport: { width: vp.width, height: vp.height }, colorScheme: scheme }, extra));
+  await routeCdn(ctx);
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  await page.goto(BASE + 'demo.html');
+  await page.waitForFunction(() => document.querySelectorAll('.pname').length >= 9 && document.getElementById('loading').hidden, null, { timeout: 60000 });
+  return { ctx, page, errors };
+}
+const stageInDialog = (page) => page.evaluate(() => !!document.querySelector('#edPreview #stage'));
+
+for (const [vp, scheme] of [[VIEWPORTS[0], 'light'], [VIEWPORTS[1], 'dark']]) {
+  test(`manifest editor: page section, undo/redo, change list (${vp.name}, ${scheme})`, async () => {
+    const { ctx, page, errors } = await openDemo(vp, scheme);
+    try {
+      await page.click('#edOpen');
+      assert.ok(await page.evaluate(() => document.getElementById('editor').open), 'dialog opens');
+      // the live preview is the viewer's own stage on wide screens; phones leave it in place
+      assert.equal(await stageInDialog(page), vp.name === 'desktop');
+      if (vp.name === 'desktop') assert.ok(await canvasColours(page) > 40, 'model drawn in the preview');
+      assert.match(await page.textContent('#edMain .ed-help'), /How to use:/);
+
+      await page.fill('#ed-page-name', 'Renamed box');
+      assert.equal(await page.textContent('#title'), 'Renamed box', 'title changes as you type');
+      await page.fill('#ed-page-units', 'in');
+      assert.match(await page.textContent('#dims'), / in$/);
+      assert.deepEqual(await page.$$eval('#edChanges li', (l) => l.map((x) => x.textContent)),
+        ['Title: "ESP32 Sensor Box" → "Renamed box"', 'Units: "mm" → "in"']);
+      assert.equal(await page.textContent('#edCount'), '2 changes from the loaded manifest');
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert.ok(over <= 1, `editor scrolls sideways by ${over}px`);
+      await page.screenshot({ path: path.join(SHOTS, `editor-page-${vp.name}-${scheme}.png`) });
+
+      await page.click('#edUndo');
+      assert.match(await page.textContent('#dims'), / mm$/, 'undo restores units');
+      assert.equal(await page.inputValue('#ed-page-units'), '');
+      await page.click('#edRedo');
+      assert.match(await page.textContent('#dims'), / in$/, 'redo applies it again');
+      await page.click('#edResetSection');
+      assert.equal(await page.textContent('#title'), 'ESP32 Sensor Box', 'Reset section clears page edits');
+      assert.equal(await page.textContent('#edCount'), 'No changes');
+
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !document.getElementById('editor').open && !!document.querySelector('.wrap > #stage'));
+      assert.ok(await canvasColours(page) > 40, 'model drawn after closing');
+      assert.deepEqual(errors, [], 'no page or console errors');
+    } finally {
+      await ctx.close();
+    }
+  });
+}
+
+test('manifest editor: shares edits and undo with Arrange, copies the manifest', async () => {
+  const { ctx, page, errors } = await openDemo(VIEWPORTS[0], 'light', { permissions: ['clipboard-read', 'clipboard-write'] });
+  try {
+    await page.click('#arrToggle');
+    await page.fill('#p-name-lid', 'Top cover');
+    await page.dispatchEvent('#p-name-lid', 'change');
+    await page.click('#edOpen');
+    assert.deepEqual(await page.$$eval('#edChanges li', (l) => l.map((x) => x.textContent)), ['Lid renamed to Top cover'], 'Arrange edits show in the editor');
+    await page.fill('#ed-page-name', 'Renamed box');
+    await page.click('#edCopy');
+    const copied = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
+    assert.equal(copied.name, 'Renamed box');
+    assert.equal(copied.parts.find((p) => p.id === 'lid').name, 'Top cover');
+    await page.click('#edUndo');
+    await page.click('#edUndo');
+    assert.equal(await page.textContent('#edCount'), 'No changes', 'undo steps back through Arrange edits too');
+    await page.click('#edDone');
+    assert.equal(await page.inputValue('#p-name-lid'), 'Lid');
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
 // ---------- embedding API: a host page on another origin drives the viewer in an iframe ----------
 // The host is a second real server on another port, so a different origin. (A Playwright-routed origin
 // doesn't work: Chromium's local network access checks then refuse to frame localhost.)

@@ -8,7 +8,7 @@
   - Browser tests: test host on a second local server; URL load, bytes load, controls, Arrange edit → `change`, origin rejection, OpenSCAD values + render.
 
 ## In progress
-- 2026-10-24: Planned item 4, manifest editor (branch `feat/manifest-editor`). Phase 1 next: shared working manifest, Undo/Redo, dialog shell.
+- 2026-10-24: Planned item 4, manifest editor (branch `feat/manifest-editor`). Phase 1 done (shared edits with a `page` key, undo history, dialog with live preview and change list, Page section). Phase 2 next: the other sections and the `up` axis.
 
 ## Next
 - Tracker side (in `ai-project-tracker`, its own backlog): where mockups live and how an item shows one. It has no mockup or file storage yet.
