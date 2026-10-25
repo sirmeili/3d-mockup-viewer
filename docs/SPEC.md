@@ -184,10 +184,10 @@ One column, max 1080 px: header (eyebrow, title, subtitle, Load files button on 
 - Changes animate (unless reduced motion is on), and the camera pulls back or in so the exploded stack stays framed.
 
 ### 6.4 Views
-Buttons come from the manifest's `views`, or default to Front, Rear, Left, Top and 3/4 (`iso`). Custom views use a direction in model axes pointing from the model toward the camera. Choosing a view animates the camera to that direction at a distance that fits the model.
+Buttons come from the manifest's `views` (with manifest-editor edits), or default to Front, Rear, Left, Top and 3/4 (`iso`). The page opens on `defaultView`, else the first listed view, else 3/4 when the manifest lists none. Custom views use a direction in model axes pointing from the model toward the camera. Choosing a view animates the camera to that direction at a distance that fits the model.
 
 ### 6.5 Finishes
-Swatches come from `finishes`, or default to Graphite, Bone white, Slate blue and Signal orange. Choosing one recolours every part whose material is `finish`. The Finish group is hidden when no part uses `finish`.
+Swatches come from `finishes` (with manifest-editor edits), or default to Graphite, Bone white, Slate blue and Signal orange; the first is the starting colour. Choosing one recolours every part whose material is `finish`. The Finish group is hidden when no part uses `finish`.
 
 ### 6.6 Section cut
 Off, X, Y or Z, with a slider for the position across the model (starts at the middle). The cut plane clips every material, including edges.
@@ -203,7 +203,11 @@ Available on drop-in pages, and on any page while it is embedded. **Arrange** tu
 - Fields have visible labels; on narrow screens each part's fields stack with their own captions.
 
 ### 6.9 The current manifest
-"Copy manifest", `getManifest` and the `change` event all produce the same thing: the loaded manifest with `up`, every part (`id`, `name`, `group`, `material`, and `file`, or `scad` in the OpenSCAD edition) and every group (`label`, `explode` rounded to 0.1, `inside` unless `none`), including Arrange edits, plus the page text (`name`, `subtitle`, `eyebrow`, `units`) with manifest-editor edits. Other fields (views, finishes, spec) pass through unchanged.
+"Copy manifest", `getManifest` and the `change` event all produce the same thing: the loaded manifest with every edit from Arrange and the manifest editor applied (section 6.12):
+- `up` as shown, and the page fields `name`, `subtitle`, `eyebrow`, `units`, `defaultView`.
+- Every part: `id`, `name`, `group`, `material`, and its source: `file`, or `scad` in the OpenSCAD edition, or the source set in the editor (a part file replaces `scad`; an OpenSCAD source sets `scad: { file, defines }`).
+- Every group that has parts: `label`, `explode` rounded to 0.1, `inside` unless `none`.
+- `views`, `finishes` and `spec` as edited; otherwise as loaded.
 
 ### 6.10 Spec sheet
 One section per `spec` entry (definition list for `rows`, bullets for `items`, a paragraph for `text`), then a computed "Model data" section: overall size, part count, group count, triangle count.
@@ -211,14 +215,24 @@ One section per `spec` entry (definition list for `rows`, bullets for `items`, a
 ### 6.11 Manifest editor
 **Edit manifest**, beside Arrange (same pages: drop-in and embedded; disabled until a model is loaded), opens a modal dialog (planned item 4, being built in phases; this describes what exists).
 - **Layout:** a header (title, model name and part count, close button), a section list, the section being edited, a side panel, and a footer. On screens wider than 760 px the side panel holds the live preview, which is the viewer's own 3D stage moved into the dialog while it is open and moved back on close, and the change list. At 760 px and below the dialog fills the screen, the section list becomes a row of tabs, and the side panel is left out.
-- **Sections:** each starts with a plain-language box saying what it controls and "How to use". The section list shows how many changes each section has. Built so far: **Page**: title (`name`), subtitle, eyebrow and units, applied to the page as you type.
-- **Change list:** every difference from the loaded manifest, in words ("Lid renamed to Top cover", "Lid: explode Z 44 → 48", "Units: "mm" → "in""), covering page, part and group edits, Arrange's included. **Reset all** clears every edit.
+- **Sections:** each starts with a plain-language box saying what it controls and "How to use". The section list shows each section's item count and how many changes it has. Text fields apply as you type; adding, removing or switching something redraws the section.
+  - **Page:** title (`name`), subtitle, eyebrow, units, and the up axis (Z or Y). Changing the axis turns the model in place and refits the camera.
+  - **Parts:** one card per part, under its group, with its colour dot, name, material and source. **Edit** opens one card at a time: name, id (read-only), group (including "New group…"), material (presets, "From file" for GLB, or a custom colour), and source: a part file, or an OpenSCAD file with defines written as `name = value` pairs (`part = "lid", wall = 3`). A source with no file name or unreadable defines is explained under the fields and not applied. A new source changes the manifest only; the model keeps the shapes already loaded. Hovering a card highlights the part.
+  - **Groups:** one card per group: name, exploded offset (X, Y, Z; editing it switches to Exploded), see-inside behaviour (switches to See inside), the parts in it, and **Delete group**, which moves its parts into groups of their own (disabled for a part that is already alone). New groups come from a part's "New group…".
+  - **Views:** every listed view, then the hidden stock views. Stock views have a show checkbox; custom views have a name, their direction, **Use current camera** and **Remove**. One "Opens on" choice sets `defaultView` (and moves the camera there). **Add view from current camera** appends a custom view named "View N". The last remaining view can't be hidden or removed.
+  - **Finishes:** each swatch's colour picker and name, **Make default** (moves it to the front; the first is marked "Opens with"), **Remove** (not the last one), and **Add finish**. Editing the colour that is showing recolours the model.
+  - **Spec sheet:** each section's title and type ("Shown as": table rows, bullets or paragraph), its rows (label and value), bullets or paragraph text, with add and remove, and **Remove section**. Switching type carries the text over line by line ("Label: value" lines become rows). "Model data" is listed as calculated and always last. **Add section** appends one with an empty bullet.
+  - Reordering (drag and drop, and up/down buttons) comes with phase 3 of planned item 4.
+- **Change list:** every difference from the loaded manifest, in words ("Lid renamed to Top cover", "Lid: explode Z 44 → 48", "Units: "mm" → "in"", "View hidden: Rear", "Opens on: 3/4 → Top", "Slate blue: #4d6b8c → #112233", "Section renamed: Size and fit → Dimensions"), covering every kind of edit, Arrange's included. List changes are described by name: views, finishes and spec sections that keep their name are compared, others show as added, removed or renamed, and a list whose only change is order shows as reordered. **Reset all** clears every edit.
 - **Footer:** Undo and Redo, the change count, **Reset section**, **Copy manifest** (same output as Arrange's) and **Done**. Esc and the close button also close the dialog. Save comes with planned item 3.
 - Native `<dialog>` with `showModal()`: the rest of the page is inert while it is open, Esc closes it, and focus returns to the Edit manifest button.
 
 ### 6.12 Edits, memory and undo
-- Arrange and the manifest editor share one set of edits layered on the loaded manifest: `{ parts: {id: {name, group, material}}, groups: {id: {label, explode, inside}}, page: {name, subtitle, eyebrow, units} }`. The loaded manifest itself is never changed; "the current manifest" (6.9) is the two combined.
-- Edits are remembered in `localStorage` under `mockupEdits:<manifest name>:<sorted part ids>`, and removed when empty. Edits saved before the `page` key existed still load.
+- Arrange and the manifest editor share one set of edits layered on the loaded manifest:
+  `{ parts: {id: {name, group, material, source}}, groups: {id: {label, explode, inside}}, page: {name, subtitle, eyebrow, units, up, defaultView}, lists: {views, finishes, spec} }`.
+  A part's `source` is `{ kind: 'file', file }` or `{ kind: 'scad', file, defines }`. A list edit holds the whole edited list. The loaded manifest itself is never changed; "the current manifest" (6.9) is the two combined.
+- An edit that brings a value back to the loaded one removes it (a part field, a page field, a whole list), so the change list and the remembered edits stay minimal. Group names (in Arrange and the editor), and Arrange's part fields, still store a value even when it matches; the change list ignores those.
+- Edits are remembered in `localStorage` under `mockupEdits:<manifest name>:<sorted part ids>`, and removed when empty. Edits saved before the `page` and `lists` keys existed still load.
 - **Undo history:** every edit records a snapshot of the edits first. Typing in one field (or one explode axis) within 1.5 seconds counts as one step, and an edit that changes nothing isn't recorded. Up to 200 steps. Undo and Redo are in the editor's footer and cover Arrange's edits too. History starts empty for each model and survives an OpenSCAD re-render of the same parts.
 - Each edit is remembered, redraws the model and panels, refreshes the editor's change list, and (when embedded) schedules the `change` event.
 
@@ -319,7 +333,7 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 - `npm test` (Node, about 2 seconds): builds the sample from OpenSCAD; builds the OpenSCAD edition with embedded sources; `text()` with the bundled fonts; OpenSCAD literals; ASCII-to-binary STL; the empty viewer's null data tag; embed origins in the page.
 - `npm run test:browser` (Playwright, about 6 minutes; needs a build and Chromium):
   - Every dist page (demo, OpenSCAD demo, URL mode in both editions) at 1200 px and 400 px, light and dark. Checks: title, no warnings, no horizontal scroll, the canvas is actually drawn (distinct-colour count), exploded and see-inside views, a section cut, Arrange showing one box per group with visible labels, no console errors. On the OpenSCAD demo at desktop/light, a value change and a full re-render.
-  - Manifest editor, at desktop/light and phone/dark: opening it (the stage moves into the preview on desktop and still draws), Page edits applied as you type, the change list and count, Undo, Redo, Reset section, Esc and the stage moving back; no sideways scroll. Also: Arrange edits appear in the editor's change list and undo, and the editor's Copy manifest output.
+  - Manifest editor, at desktop/light and phone/dark: opening it (the stage moves into the preview on desktop and still draws), Page edits applied as you type, the change list and count, Undo, Redo, Reset section, Esc and the stage moving back; no sideways scroll. Arrange edits appear in the editor's change list and undo. Parts (read-only id, material, group, source with its error messages), Groups (offset, Delete group and its undo), the up axis, Views (hide, add from camera, opens on), Finishes (recolour, add, make default) and the Spec sheet (rename, switch type, add section, change-list wording), each checked in the copied manifest. Every section on a phone in dark mode without sideways scroll.
   - Embedding, with a test host on a second local server: load by URL, controls, coded errors, Arrange edit to `change`, `getManifest`; load by transferred bytes; rejection of hosts that aren't allowed; OpenSCAD `setValues` and `render`.
   - Screenshots go to `test-results/` and should be looked at.
   - `MOCKUP_TEST_CDN_DIR` serves three.js and fflate from a local folder for offline runs.
@@ -339,7 +353,10 @@ The project's code is MIT. The OpenSCAD WebAssembly build is GPL-2.0-or-later: t
 - Parts over 400,000 triangles get no edge lines.
 - URL mode in the OpenSCAD edition follows at most 40 source files.
 - OpenSCAD renders in the browser have no time limit; a runaway model keeps a worker busy until the page is closed.
-- Arrange edits are remembered per manifest name and part set; renaming the manifest or changing the part list starts fresh.
+- Edits are remembered per manifest name (as loaded) and part set; renaming the manifest file's `name` or changing the part list starts fresh.
+- A part source changed in the manifest editor isn't loaded until the files are loaded again; the editor says so.
+- On phones the manifest editor has no live preview; changes show when it closes.
+- The manifest editor's section tabs scroll sideways inside their row on narrow phones.
 - `?manifest=`, `?model=` and `?parent=` don't work inside Claude artifacts.
 - The OpenSCAD edition needs http(s), not `file://`.
 - Browsers limit live WebGL contexts (roughly 16 per page), which matters for pages with many embeds (planned item 5).
@@ -373,7 +390,7 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 - **Tests:** browser tests for each path: the file picker (stubbed in the test), the download (Playwright captures it and the test checks the JSON), and the Copy fallback where both are unavailable.
 
 ### 4. Manifest editor (full-screen dialog)
-**Status:** in progress on `feat/manifest-editor`, in four phases: (1) shared working manifest, Undo/Redo, change list, the dialog shell; (2) the sections; (3) drag-and-drop reordering; (4) Raw JSON. **Phase 1 is done** (sections 6.11 and 6.12 describe it), including the Page section except the `up` axis, which needs the model rebuilt and comes with phase 2.
+**Status:** in progress on `feat/manifest-editor`, in four phases: (1) shared working manifest, Undo/Redo, change list, the dialog shell; (2) the sections; (3) drag-and-drop reordering; (4) Raw JSON. **Phases 1 and 2 are done** (sections 6.11 and 6.12 describe them). The `up` axis turned out not to need a rebuild: it only changes the model's rotation, the explode axis, the size order and the camera.
 
 **Design:** the "Mockup Viewer Roadmap Screens" canvas (https://claude.ai/artifact/VsKyA5omGhSTWbQmZJa6Qr), artboards "Editor: Parts & groups", "Editor: Spec sheet", "Editor: Views & finishes", "Editor: Raw JSON with validation" and "Manifest editor on a phone". The canvas uses the old TODO numbers (it calls this item 5). Its main-viewer Save menu, which offers saving through `mockup serve --writable`, is superseded by item 3.
 

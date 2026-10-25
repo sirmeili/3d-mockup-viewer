@@ -209,6 +209,24 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 .ed-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 16px; }
 .ed-fields .wide { grid-column: 1 / -1; }
 .ed .fld:focus-within { outline: none; }
+.ed textarea { font: 13.5px/1.45 var(--font-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; width: 100%; box-sizing: border-box; min-height: 90px; resize: vertical; }
+.ed input[type="number"] { font: 13px var(--font-mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 7px; width: 72px; }
+.ed input[readonly] { color: var(--muted); }
+.ed-list { display: grid; gap: 8px; }
+.ed-list > .fl { display: flex; justify-content: space-between; gap: 8px; }
+.ed-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; display: grid; gap: 10px; min-width: 0; }
+.ed-card.open { border-color: var(--accent); }
+.ed-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-width: 0; }
+.ed-row > .grow { flex: 1 1 160px; min-width: 0; }
+.ed-row .meta { font-size: 13px; color: var(--muted); }
+.ed-row .meta.mono { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.ed-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 6px; align-items: center; }
+.ed-one { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.ed-err { color: var(--warn); font-size: 12.5px; margin: 0; }
+.ed-err:empty { display: none; }
+.ed-swatch { width: 40px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); flex: none; }
+.ed-badge { font: 11px var(--font-mono); letter-spacing: .04em; color: var(--accent); }
+.ed .add { justify-self: start; border-style: dashed; }
 .ed input[type="text"], .ed select {
   font: 13.5px/1.3 var(--font-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line);
   border-radius: 6px; padding: 7px 8px; width: 100%; box-sizing: border-box; min-width: 0;
@@ -628,9 +646,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     state.manifest = mf;
     const fileNames = Object.keys(files);
     const hasGLB = fileNames.some((f) => ext(f) === 'glb');
-    state.up = mf.up || (hasGLB && !fileNames.some((f) => /\.(stl|3mf)$/i.test(f)) ? 'y' : 'z');
-    root.rotation.set(state.up === 'z' ? -Math.PI / 2 : 0, 0, 0);
-    if (mf.finishes && mf.finishes.length) finishHex = mf.finishes[0].color.toLowerCase();
+    state.baseUp = mf.up || (hasGLB && !fileNames.some((f) => /\.(stl|3mf)$/i.test(f)) ? 'y' : 'z');
+    state.up = state.baseUp;
 
     const used = new Set();
     const specs = []; // {id,name,group,material,file}
@@ -689,6 +706,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     state.signature = state.parts.map((p) => p.id).sort().join('|');
     state.edits = loadEdits();
     if (edHistory.key !== editsKey()) resetHistory();
+    applyUpAxis();
+    if (state.edits.lists.finishes || (mf.finishes && mf.finishes.length)) setFinishColor(finishes()[0].color);
     arrange();
     state.radius = box.getBoundingSphere(new THREE.Sphere()).radius;
 
@@ -705,7 +724,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     renderPanels();
     buildViewButtons();
     if (keep) { camera.position.copy(keep.pos); controls.target.copy(keep.target); camT = 1; controls.update(); }
-    else goView(mf.defaultView || (mf.views && mf.views.length ? viewName(mf.views[0]) : 'iso'), true);
+    else goView(defaultView(), true);
     // after the caller has re-added its pending warnings
     if (embedOrigins.length) setTimeout(() => postToHost('loaded', modelSummary()), 0);
   }
@@ -770,8 +789,9 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   }
 
   // Local edits on top of the loaded manifest, shared by Arrange and the manifest editor and remembered
-  // per set of parts in this browser: {parts: {id: patch}, groups: {id: patch}, page: {field: value}}
-  const EDIT_KEYS = ['parts', 'groups', 'page'];
+  // per set of parts in this browser: {parts: {id: patch}, groups: {id: patch}, page: {field: value},
+  // lists: {views|finishes|spec: the whole edited list}}
+  const EDIT_KEYS = ['parts', 'groups', 'page', 'lists'];
   function editsKey() { return 'mockupEdits:' + (state.manifest.name || '') + ':' + state.signature; }
   function normEdits(e) {
     const out = {};
@@ -810,12 +830,32 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function restoreEdits(json) { state.edits = normEdits(JSON.parse(json)); edHistory.lastStep = null; saveEdits(); refreshFromEdits(); }
   function undo() { if (!edHistory.undo.length) return; edHistory.redo.push(JSON.stringify(state.edits)); restoreEdits(edHistory.undo.pop()); edRender(); }
   function redo() { if (!edHistory.redo.length) return; edHistory.undo.push(JSON.stringify(state.edits)); restoreEdits(edHistory.redo.pop()); edRender(); }
-  function refreshFromEdits() { arrange(); renderHeader(); updateDims(); renderSheet(); }
+  function refreshFromEdits() {
+    const turned = applyUpAxis();
+    arrange(); renderHeader(); updateDims(); buildViewButtons(); buildFinishes(); renderSheet(); updateCut();
+    if (turned) goView(views().some((v) => viewName(v) === current) ? current : viewName(views()[0]), true);
+  }
   function editPart(id, patch) { applyEdit(null, (ed) => { ed.parts[id] = Object.assign({}, ed.parts[id], patch); }); }
   function editGroup(id, patch) { applyEdit(null, (ed) => { ed.groups[id] = Object.assign({}, ed.groups[id], patch); }); }
 
-  // page fields with edits applied
+  // page fields and lists with edits applied
   function pageInfo() { return Object.assign({}, state.manifest, state.edits.page); }
+  const DEFAULT_VIEWS = ['front', 'rear', 'left', 'top', 'iso'];
+  const DEFAULT_FINISHES = [{ name: 'Graphite', color: '#3a3e41' }, { name: 'Bone white', color: '#e4e1d8' }, { name: 'Slate blue', color: '#4d6b8c' }, { name: 'Signal orange', color: '#d0662b' }];
+  function baseViews() { return state.manifest.views && state.manifest.views.length ? state.manifest.views : DEFAULT_VIEWS; }
+  function views() { const l = state.edits.lists.views; return l && l.length ? l : baseViews(); }
+  function baseFinishes() { return state.manifest.finishes && state.manifest.finishes.length ? state.manifest.finishes : DEFAULT_FINISHES; }
+  function finishes() { const l = state.edits.lists.finishes; return l && l.length ? l : baseFinishes(); }
+  function specSections() { return state.edits.lists.spec || state.manifest.spec || []; }
+  // returns true when the up axis changed
+  function applyUpAxis() {
+    const up = state.edits.page.up || state.baseUp;
+    const turned = up !== state.up;
+    state.up = up;
+    root.rotation.set(up === 'z' ? -Math.PI / 2 : 0, 0, 0);
+    root.updateMatrixWorld(true);
+    return turned;
+  }
   function units() { return pageInfo().units || 'mm'; }
   function updateDims() {
     const s = state.assembledBox.getSize(new THREE.Vector3());
@@ -831,7 +871,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   };
   function viewName(v) { return typeof v === 'string' ? v : slug(v.name); }
   function viewDir(name) {
-    const mv = (state.manifest.views || []).find((v) => typeof v === 'object' && slug(v.name) === name);
+    const mv = views().find((v) => typeof v === 'object' && slug(v.name) === name);
     if (mv && Array.isArray(mv.dir)) {
       const d = new THREE.Vector3().fromArray(mv.dir);
       if (state.up === 'z') d.set(d.x, d.z, -d.y);
@@ -839,16 +879,17 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     }
     return new THREE.Vector3().fromArray(STOCK_VIEWS[name] || STOCK_VIEWS.iso).normalize();
   }
+  function viewLabel(v) { return typeof v === 'string' ? (v === 'iso' ? '3/4' : v[0].toUpperCase() + v.slice(1)) : v.name; }
   let current = 'iso';
   function buildViewButtons() {
-    const list = state.manifest.views && state.manifest.views.length ? state.manifest.views : ['front', 'rear', 'left', 'top', 'iso'];
+    const list = views();
     const seg = $('viewSeg'); seg.textContent = '';
     list.forEach((v) => {
       const n = viewName(v);
       if (typeof v === 'string' && !STOCK_VIEWS[n]) return;
       const b = document.createElement('button');
       b.type = 'button'; b.id = 'v-' + n; b.dataset.view = n;
-      b.textContent = typeof v === 'string' ? (n === 'iso' ? '3/4' : n[0].toUpperCase() + n.slice(1)) : v.name;
+      b.textContent = viewLabel(v);
       b.setAttribute('aria-pressed', String(n === current));
       b.addEventListener('click', () => goView(n));
       seg.appendChild(b);
@@ -913,8 +954,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   // ---------- finishes ----------
   function buildFinishes() {
     const box = $('finishes'); box.textContent = '';
-    const list = (state.manifest.finishes && state.manifest.finishes.length) ? state.manifest.finishes
-      : [{ name: 'Graphite', color: '#3a3e41' }, { name: 'Bone white', color: '#e4e1d8' }, { name: 'Slate blue', color: '#4d6b8c' }, { name: 'Signal orange', color: '#d0662b' }];
+    const list = finishes();
     state.finishList = list;
     const anyFinish = state.parts.some((p) => p.matKey === 'finish');
     $('finishBox').hidden = !anyFinish;
@@ -927,9 +967,12 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       box.appendChild(b);
     });
   }
-  function pickFinish(color) {
+  function setFinishColor(color) {
     finishHex = color.toLowerCase();
     state.parts.forEach((p) => { if (p.matKey === 'finish') p.mesh.material.color.copy(lin(finishHex)); });
+  }
+  function pickFinish(color) {
+    setFinishColor(color);
     $('finishes').querySelectorAll('.swatch').forEach((s, i) => s.setAttribute('aria-pressed', String(state.finishList[i].color.toLowerCase() === finishHex)));
     renderParts();
   }
@@ -1101,13 +1144,17 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function currentManifest() {
     const mf = state.manifest;
     const out = JSON.parse(JSON.stringify(mf || {}));
-    Object.assign(out, JSON.parse(JSON.stringify(state.edits.page)));
+    Object.assign(out, JSON.parse(JSON.stringify(state.edits.page)), JSON.parse(JSON.stringify(state.edits.lists)));
     const baseParts = {}; (mf.parts || []).forEach((p) => { baseParts[p.id] = p; });
     out.up = state.up;
     out.parts = state.parts.map((p) => {
       const o = Object.assign({}, baseParts[p.id] || {}, { id: p.id, name: p.name, group: p.groupId, material: p.matKey });
       const scad = window.mockupScad && window.mockupScad.partScad ? window.mockupScad.partScad(p.id) : null;
       if (scad) { o.scad = scad; delete o.file; } else o.file = p.file;
+      // a source edited in the manifest editor: a part file, or an OpenSCAD file and its defines
+      const src = (state.edits.parts[p.id] || {}).source;
+      if (src && src.kind === 'scad') o.scad = { file: src.file, defines: src.defines || {} };
+      else if (src) { o.file = src.file; delete o.scad; }
       return o;
     });
     out.groups = {};
@@ -1153,10 +1200,45 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   const ED_SECTIONS = [
     {
       id: 'page', title: 'Page',
-      help: ['The text around the model: the small eyebrow line above the title, the title, and the line under it. Units appear after the overall size and in the spec sheet.',
-        'type in a field and the page changes as you type. An empty title shows "Loaded model", an empty eyebrow shows "3D mockup", and an empty subtitle is hidden.'],
+      help: ['The text around the model: the small eyebrow line above the title, the title, and the line under it. Units appear after the overall size and in the spec sheet. The up axis says which way the model stands.',
+        'type in a field and the page changes as you type. An empty title shows "Loaded model", an empty eyebrow shows "3D mockup", and an empty subtitle is hidden. Z up is the OpenSCAD convention; most GLB files are Y up.'],
       render: edPageSection,
-      reset: (ed) => { ed.page = {}; }
+      reset: (ed) => { PAGE_FIELDS.forEach(([k]) => { delete ed.page[k]; }); delete ed.page.up; }
+    },
+    {
+      id: 'parts', title: 'Parts', count: () => String(state.parts.length),
+      help: ['Parts are the separate pieces of the model: one per STL file, 3MF object, GLB mesh or OpenSCAD part. Each part sits in a group, and everything in a group moves together in the Exploded view.',
+        'choose Edit on a part to change its name, group, colour or source. The id can\'t be changed: it names the part\'s default file and the edits remembered in this browser. A new source is written to the manifest; the 3D view keeps the shapes already loaded until you load the files again.'],
+      render: edPartsSection,
+      reset: (ed) => { ed.parts = {}; }
+    },
+    {
+      id: 'groups', title: 'Groups', count: () => String(state.groups.size),
+      help: ['Groups are parts that move together. Each has a name, how far it moves in the Exploded view, and what it does in See inside.',
+        'set the offsets in the model\'s units along each axis; the model switches to Exploded so you can see it. Delete group puts its parts into groups of their own. To start a new group, choose "New group…" for a part in Parts or Arrange.'],
+      render: edGroupsSection,
+      reset: (ed) => { ed.groups = {}; }
+    },
+    {
+      id: 'views', title: 'Views', count: () => String(views().length),
+      help: ['Views are the camera buttons under the model. Choose which ones appear and which one the page opens on.',
+        'tick a stock view to show it and untick it to hide it. To add your own angle, turn the model in the preview to the shot you want and press "Add view from current camera". New views go at the end.'],
+      render: edViewsSection,
+      reset: (ed) => { delete ed.lists.views; delete ed.page.defaultView; }
+    },
+    {
+      id: 'finishes', title: 'Finishes', count: () => String(finishes().length),
+      help: ['Finishes are the colour swatches. Each one recolours every part whose material is "Finish colour", so you can compare filament colours.',
+        'change a swatch\'s name or colour, remove it, or add one. The first swatch is the one the page opens with; "Make default" moves a swatch to the front.'],
+      render: edFinishesSection,
+      reset: (ed) => { delete ed.lists.finishes; }
+    },
+    {
+      id: 'spec', title: 'Spec sheet', count: () => String(specSections().length),
+      help: ['The spec sheet is the panel beside the parts list: sizes, ports, mounting, print notes. It is made of sections, and each section is a table of label/value rows, a bullet list, or a paragraph.',
+        'edit titles and text in place. Change a section\'s type with "Shown as"; its text carries over. "Model data" is calculated from the model and can\'t be edited.'],
+      render: edSpecSection,
+      reset: (ed) => { delete ed.lists.spec; }
     }
   ];
   let edSection = 'page';
@@ -1188,6 +1270,9 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   // redraw everything in the dialog (open, section switch, undo, reset, new model)
   function edRender() {
     if (!$('editor').open) return;
+    const active = document.activeElement;
+    const focusId = active && $('editor').contains(active) ? active.id : null;
+    const scroll = $('edMain').scrollTop;
     const nav = $('edNav'); nav.textContent = '';
     ED_SECTIONS.forEach((s) => {
       const b = document.createElement('button'); b.type = 'button'; b.id = 'ed-nav-' + s.id;
@@ -1204,6 +1289,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     help.append(el('p', sec.help[0]), how);
     host.append(el('h3', sec.title), help);
     sec.render(host);
+    host.scrollTop = scroll;
+    if (focusId && $(focusId)) $(focusId).focus();
     edChanged();
   }
   // refresh the parts that follow every edit, leaving the field being typed in alone
@@ -1226,20 +1313,391 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     $('edRedo').disabled = !edHistory.redo.length;
   }
 
+  // small builders for editor fields
+  function edInput(id, value, label, onInput, opts) {
+    const i = document.createElement('input'); i.type = 'text'; i.id = id; i.value = value == null ? '' : String(value);
+    if (opts && opts.placeholder) i.placeholder = opts.placeholder;
+    if (opts && opts.readOnly) i.readOnly = true;
+    if (label) i.setAttribute('aria-label', label);
+    if (onInput) i.addEventListener('input', () => onInput(i.value));
+    return i;
+  }
+  function edButton(text, onClick, opts) {
+    opts = opts || {};
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn small' + (opts.cls ? ' ' + opts.cls : ''); b.textContent = text;
+    if (opts.id) b.id = opts.id;
+    if (opts.label) b.setAttribute('aria-label', opts.label);
+    b.disabled = !!opts.disabled;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+  // adding, removing or switching something changes the section's shape: apply the edit, then redraw the section
+  function edStructural(fn) { applyEdit(null, fn); edRender(); }
+
   function edPageSection(host) {
     const grid = el('div'); grid.className = 'ed-fields';
     const mf = pageInfo();
     PAGE_FIELDS.forEach(([k, label, dflt]) => {
-      const i = document.createElement('input'); i.type = 'text'; i.id = 'ed-page-' + k; i.value = mf[k] || '';
-      i.placeholder = dflt;
-      i.addEventListener('input', () => applyEdit('page:' + k, (ed) => {
-        if (i.value === (state.manifest[k] || '')) delete ed.page[k]; else ed.page[k] = i.value;
-      }));
+      const i = edInput('ed-page-' + k, mf[k] || '', null, (v) => applyEdit('page:' + k, (ed) => {
+        if (v === (state.manifest[k] || '')) delete ed.page[k]; else ed.page[k] = v;
+      }), { placeholder: dflt });
       const f = fld(label, i, true);
       if (k === 'subtitle') f.classList.add('wide');
       grid.appendChild(f);
     });
+    const up = document.createElement('select'); up.id = 'ed-page-up';
+    up.append(opt('z', 'Z up (OpenSCAD)', state.up === 'z'), opt('y', 'Y up (most GLB files)', state.up === 'y'));
+    up.addEventListener('change', () => applyEdit(null, (ed) => { if (up.value === state.baseUp) delete ed.page.up; else ed.page.up = up.value; }));
+    grid.appendChild(fld('Up axis', up, true));
     host.appendChild(grid);
+  }
+
+  // ----- Parts -----
+  let edOpenPart = null;
+  // set one field of a part's edits; a value equal to the loaded one removes the edit
+  function setPartEdit(ed, p, key, value, base) {
+    const e = Object.assign({}, ed.parts[p.id]);
+    if (JSON.stringify(value) === JSON.stringify(base)) delete e[key]; else e[key] = value;
+    if (Object.keys(e).length) ed.parts[p.id] = e; else delete ed.parts[p.id];
+  }
+  function baseSource(p) {
+    const bp = (state.manifest.parts || []).find((q) => q.id === p.id) || {};
+    const scad = bp.scad || (window.mockupScad && window.mockupScad.partScad ? window.mockupScad.partScad(p.id) : null);
+    return scad ? { kind: 'scad', file: scad.file, defines: scad.defines || {} } : { kind: 'file', file: p.file };
+  }
+  function partSource(p) { return (state.edits.parts[p.id] || {}).source || baseSource(p); }
+  function definesText(d) { return Object.keys(d || {}).map((k) => k + ' = ' + JSON.stringify(d[k])).join(', '); }
+  // 'part = "lid", wall = 3' -> {part: 'lid', wall: 3}; null when it can't be read
+  function parseDefines(text) {
+    const src = text.trim(), out = {};
+    const re = /\s*([A-Za-z_$][\w$]*)\s*=\s*("(?:[^"\\]|\\.)*"|\[[^\]]*\]|[^,;\n]+?)\s*(?:[,;\n]+|$)/y;
+    let i = 0;
+    while (i < src.length) {
+      re.lastIndex = i;
+      const m = re.exec(src);
+      if (!m) return null;
+      let v = m[2].trim();
+      try { v = JSON.parse(v); } catch (e) { /* a bare word stays text */ }
+      out[m[1]] = v; i = re.lastIndex;
+    }
+    return out;
+  }
+  function edPartsSection(host) {
+    state.groups.forEach((g) => {
+      const list = el('div'); list.className = 'ed-list';
+      const head = el('div'); head.className = 'fl';
+      head.append(el('span', g.label), el('span', g.parts.length + (g.parts.length === 1 ? ' part' : ' parts')));
+      list.appendChild(head);
+      g.parts.forEach((p) => list.appendChild(edPartCard(p)));
+      host.appendChild(list);
+    });
+  }
+  function edPartCard(p) {
+    const open = edOpenPart === p.id;
+    const src = partSource(p);
+    const card = el('div'); card.className = 'ed-card' + (open ? ' open' : '');
+    const row = el('div'); row.className = 'ed-row';
+    const dot = el('span'); dot.className = 'dot'; dot.style.background = swatchHex(p);
+    const name = el('span', p.name); name.className = 'grow';
+    const mat = el('span', MAT_LABELS[p.matKey] || p.matKey); mat.className = 'meta';
+    const where = el('span', src.kind === 'scad' ? (definesText(src.defines) || src.file) : src.file); where.className = 'meta mono';
+    const edit = edButton(open ? 'Close' : 'Edit', () => { edOpenPart = open ? null : p.id; edRender(); },
+      { id: 'ed-part-edit-' + p.id, label: (open ? 'Close ' : 'Edit ') + p.name });
+    edit.setAttribute('aria-expanded', String(open));
+    row.append(dot, name, mat, where, edit);
+    card.appendChild(row);
+    card.addEventListener('mouseenter', () => highlight(p, true));
+    card.addEventListener('mouseleave', () => highlight(p, false));
+    if (open) card.appendChild(edPartFields(p, src));
+    return card;
+  }
+  function edPartFields(p, src) {
+    const grid = el('div'); grid.className = 'ed-fields';
+    const nm = edInput('ed-part-name-' + p.id, p.name, null, (v) => applyEdit('part:' + p.id + ':name', (ed) => setPartEdit(ed, p, 'name', v.trim() || p.baseName, p.baseName)));
+    const id = edInput('ed-part-id-' + p.id, p.id, null, null, { readOnly: true });
+    const gs = document.createElement('select'); gs.id = 'ed-part-group-' + p.id;
+    state.groups.forEach((q) => gs.append(opt(q.id, q.label, q.id === p.groupId)));
+    gs.append(opt('__new', 'New group…'));
+    gs.addEventListener('change', () => edStructural((ed) => {
+      let gid = gs.value;
+      if (gid === '__new') {
+        let n = 1; while (state.groups.has('group-' + n)) n++;
+        gid = 'group-' + n;
+        ed.groups[gid] = Object.assign({}, ed.groups[gid], { label: 'Group ' + n });
+      }
+      setPartEdit(ed, p, 'group', gid, p.baseGroup);
+    }));
+    const ms = document.createElement('select'); ms.id = 'ed-part-mat-' + p.id; ms.className = 'grow';
+    const custom = /^#[0-9a-f]{6}$/i.test(p.matKey);
+    Object.keys(MAT_LABELS).forEach((k) => { if (k !== 'keep' || p.origMaterial) ms.append(opt(k, MAT_LABELS[k], k === p.matKey)); });
+    ms.append(opt('custom', 'Custom colour', custom));
+    const col = document.createElement('input'); col.type = 'color'; col.id = 'ed-part-col-' + p.id; col.className = 'ed-swatch';
+    col.hidden = !custom; col.value = custom ? p.matKey : '#888888'; col.setAttribute('aria-label', 'Custom colour for ' + p.name);
+    const setMat = (v) => applyEdit('part:' + p.id + ':mat', (ed) => setPartEdit(ed, p, 'material', v, p.baseMat));
+    ms.addEventListener('change', () => { setMat(ms.value === 'custom' ? col.value : ms.value); edRender(); });
+    col.addEventListener('input', () => setMat(col.value));
+    const mwrap = el('span'); mwrap.className = 'ed-row'; mwrap.append(ms, col);
+
+    const kind = document.createElement('select'); kind.id = 'ed-part-src-' + p.id;
+    kind.append(opt('file', 'Part file (STL, 3MF, GLB)', src.kind === 'file'), opt('scad', 'OpenSCAD file', src.kind === 'scad'));
+    const file = edInput('ed-part-file-' + p.id, src.file || '', null, null, { placeholder: src.kind === 'scad' ? 'case.scad' : p.id + '.stl' });
+    const defs = edInput('ed-part-defs-' + p.id, definesText(src.defines), null, null, { placeholder: 'part = "lid"' });
+    const defsFld = fld('Defines (-D values)', defs, true); defsFld.classList.add('wide'); defsFld.hidden = src.kind !== 'scad';
+    const err = el('p'); err.className = 'ed-err wide'; err.id = 'ed-part-err-' + p.id; err.setAttribute('role', 'status');
+    // a source that can't be read yet (no file, bad defines) is explained and not applied
+    const setSource = (step) => {
+      const d = kind.value === 'scad' ? parseDefines(defs.value) : {};
+      const f = file.value.trim();
+      err.textContent = !f ? (kind.value === 'scad' ? 'Name the .scad file.' : 'Name the part file.')
+        : d === null ? 'Write defines as name = value, separated by commas, for example part = "lid", wall = 3.' : '';
+      if (err.textContent) return;
+      const next = kind.value === 'scad' ? { kind: 'scad', file: f, defines: d } : { kind: 'file', file: f };
+      applyEdit(step, (ed) => setPartEdit(ed, p, 'source', next, baseSource(p)));
+    };
+    kind.addEventListener('change', () => {
+      const b = baseSource(p);
+      file.value = kind.value === b.kind ? b.file || '' : kind.value === 'file' ? p.file : '';
+      defs.value = kind.value === b.kind ? definesText(b.defines) : '';
+      file.placeholder = kind.value === 'scad' ? 'case.scad' : p.id + '.stl';
+      defsFld.hidden = kind.value !== 'scad';
+      setSource(null);
+    });
+    file.addEventListener('input', () => setSource('part:' + p.id + ':file'));
+    defs.addEventListener('input', () => setSource('part:' + p.id + ':defs'));
+
+    grid.append(fld('Part name', nm, true), fld('Id (fixed)', id, true), fld('Moves with group', gs, true), fld('Colour / material', mwrap, true),
+      fld('Source', kind, true), fld('File', file, true), defsFld, err);
+    return grid;
+  }
+
+  // ----- Groups -----
+  function edGroupsSection(host) {
+    const list = el('div'); list.className = 'ed-list';
+    state.groups.forEach((g) => {
+      const card = el('div'); card.className = 'ed-card';
+      const grid = el('div'); grid.className = 'ed-fields';
+      const lab = edInput('ed-group-label-' + g.id, g.label, null, (v) => applyEdit('group:' + g.id + ':label', (ed) => {
+        ed.groups[g.id] = Object.assign({}, ed.groups[g.id], { label: v.trim() || g.id });
+      }));
+      const ex = document.createElement('fieldset'); ex.className = 'gfield';
+      const lg = document.createElement('legend'); lg.className = 'fl';
+      lg.textContent = 'Exploded offset, ' + units() + (state.up === 'z' ? ' (Z is up)' : ' (Y is up)');
+      const axes = el('div'); axes.className = 'axes';
+      ['x', 'y', 'z'].forEach((axis, ai) => {
+        const ax = document.createElement('label'); ax.className = 'ax';
+        ax.append(el('span', axis.toUpperCase()), numInput('ed-group-ex-' + axis + '-' + g.id, g.explode.getComponent(ai), (v) => {
+          applyEdit('explode:' + g.id + ':' + axis, (ed) => {
+            const cur = state.groups.get(g.id).explode.toArray().map((n) => Math.round(n * 10) / 10);
+            cur[ai] = v;
+            ed.groups[g.id] = Object.assign({}, ed.groups[g.id], { explode: cur });
+          });
+          if (state.mode !== 'exploded') chooseMode('exploded');
+          clearTimeout(refitTimer); refitTimer = setTimeout(refit, 450);
+        }, 'Exploded offset ' + axis.toUpperCase() + ' for ' + g.label));
+        axes.append(ax);
+      });
+      ex.append(lg, axes);
+      const sel = document.createElement('select'); sel.id = 'ed-group-in-' + g.id;
+      sel.append(opt('none', 'Stays', !g.inside || g.inside === 'none'), opt('ghost', 'Ghosted', g.inside === 'ghost'), opt('hide', 'Hidden', g.inside === 'hide'));
+      sel.addEventListener('change', () => {
+        applyEdit(null, (ed) => { ed.groups[g.id] = Object.assign({}, ed.groups[g.id], { inside: sel.value }); });
+        chooseMode('inside');
+      });
+      grid.append(fld('Group name', lab, true), ex, fld('In "See inside" view', sel, true));
+      const row = el('div'); row.className = 'ed-row';
+      const members = el('span', 'Parts: ' + g.parts.map((p) => p.name).join(', ')); members.className = 'meta grow';
+      const alone = g.parts.length === 1 && g.parts[0].id === g.id;
+      row.append(members, edButton('Delete group', () => edStructural((ed) => {
+        g.parts.forEach((p) => setPartEdit(ed, p, 'group', p.id, p.baseGroup));
+        delete ed.groups[g.id];
+      }), { id: 'ed-group-del-' + g.id, disabled: alone, label: 'Delete group ' + g.label }));
+      card.append(grid, row);
+      list.append(card);
+    });
+    host.append(list);
+  }
+
+  // ----- Views -----
+  // the view the page opens on
+  function defaultView() {
+    return pageInfo().defaultView || (state.edits.lists.views || (state.manifest.views && state.manifest.views.length) ? viewName(views()[0]) : 'iso');
+  }
+  // camera direction from the model toward the camera, in model axes (what a custom view's dir holds)
+  function cameraDir() {
+    const d = camera.position.clone().sub(controls.target).normalize();
+    return (state.up === 'z' ? [d.x, -d.z, d.y] : [d.x, d.y, d.z]).map((v) => Math.round(v * 100) / 100);
+  }
+  function edViewsSection(host) {
+    const list = views(), names = list.map(viewName), dflt = defaultView();
+    const setViews = (step, next) => applyEdit(step, (ed) => {
+      if (JSON.stringify(next) === JSON.stringify(baseViews())) delete ed.lists.views; else ed.lists.views = next;
+      if (ed.page.defaultView && !next.some((v) => viewName(v) === ed.page.defaultView)) delete ed.page.defaultView;
+    });
+    const wrap = el('div'); wrap.className = 'ed-list';
+    const rows = list.map((v, i) => ({ v, i, shown: true }))
+      .concat(Object.keys(STOCK_VIEWS).filter((n) => !names.includes(n)).map((n) => ({ v: n, i: -1, shown: false })));
+    rows.forEach(({ v, i, shown }) => {
+      const n = viewName(v);
+      const card = el('div'); card.className = 'ed-card';
+      const row = el('div'); row.className = 'ed-row';
+      if (typeof v === 'string') {
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'ed-view-show-' + n; cb.checked = shown;
+        cb.disabled = shown && list.length === 1;
+        cb.addEventListener('change', () => { setViews(null, cb.checked ? list.concat([n]) : list.filter((x) => x !== n)); edRender(); });
+        const lab = document.createElement('label'); lab.className = 'toggle grow'; lab.append(cb, viewLabel(v));
+        const kind = el('span', shown ? 'Stock view' : 'Hidden'); kind.className = 'meta';
+        row.append(lab, kind);
+      } else {
+        const nm = edInput('ed-view-name-' + i, v.name, 'View name', (val) => {
+          const next = views().slice(); next[i] = Object.assign({}, next[i], { name: val.trim() || 'View' });
+          setViews('view:' + i + ':name', next);
+        });
+        nm.classList.add('grow');
+        const dir = el('span', 'dir ' + (v.dir || []).join(', ')); dir.className = 'meta mono'; dir.id = 'ed-view-dir-' + i;
+        row.append(nm, dir,
+          edButton('Use current camera', () => {
+            const next = views().slice(); next[i] = Object.assign({}, next[i], { dir: cameraDir() });
+            setViews(null, next); edRender();
+          }, { id: 'ed-view-cam-' + i, label: 'Use current camera for ' + v.name }),
+          edButton('Remove', () => { setViews(null, list.filter((_, j) => j !== i)); edRender(); },
+            { id: 'ed-view-rm-' + i, disabled: list.length === 1, label: 'Remove view ' + v.name }));
+      }
+      const rd = document.createElement('input'); rd.type = 'radio'; rd.name = 'ed-default-view'; rd.id = 'ed-view-default-' + n;
+      rd.checked = shown && n === dflt; rd.disabled = !shown;
+      rd.addEventListener('change', () => {
+        applyEdit(null, (ed) => { if (n === (state.manifest.defaultView || '')) delete ed.page.defaultView; else ed.page.defaultView = n; });
+        goView(n);
+      });
+      const rl = document.createElement('label'); rl.className = 'toggle'; rl.append(rd, 'Opens on');
+      row.append(rl);
+      card.append(row); wrap.append(card);
+    });
+    wrap.append(edButton('+ Add view from current camera', () => {
+      let k = 1; while (list.some((v) => typeof v === 'object' && slug(v.name) === 'view-' + k)) k++;
+      setViews(null, list.concat([{ name: 'View ' + k, dir: cameraDir() }])); edRender();
+    }, { id: 'ed-view-add', cls: 'add' }));
+    host.append(wrap);
+  }
+
+  // ----- Finishes -----
+  function edFinishesSection(host) {
+    const list = finishes();
+    const setFinishes = (step, next) => applyEdit(step, (ed) => {
+      if (JSON.stringify(next) === JSON.stringify(baseFinishes())) delete ed.lists.finishes; else ed.lists.finishes = next;
+    });
+    const wrap = el('div'); wrap.className = 'ed-list';
+    list.forEach((f, i) => {
+      const card = el('div'); card.className = 'ed-card';
+      const row = el('div'); row.className = 'ed-row';
+      const col = document.createElement('input'); col.type = 'color'; col.className = 'ed-swatch'; col.id = 'ed-finish-color-' + i;
+      col.value = '#' + new THREE.Color(f.color).getHexString(); col.setAttribute('aria-label', 'Colour of ' + f.name);
+      col.addEventListener('input', () => {
+        const cur = finishes()[i], showing = finishHex === String(cur.color).toLowerCase();
+        const next = finishes().slice(); next[i] = Object.assign({}, cur, { color: col.value });
+        setFinishes('finish:' + i + ':color', next);
+        if (showing) pickFinish(col.value);
+      });
+      const nm = edInput('ed-finish-name-' + i, f.name, 'Finish name', (v) => {
+        const next = finishes().slice(); next[i] = Object.assign({}, next[i], { name: v.trim() || 'Finish' });
+        setFinishes('finish:' + i + ':name', next);
+      });
+      nm.classList.add('grow');
+      row.append(col, nm);
+      if (i === 0) { const b = el('span', 'Opens with'); b.className = 'ed-badge'; row.append(b); }
+      else row.append(edButton('Make default', () => {
+        const next = finishes().slice(); next.unshift(next.splice(i, 1)[0]);
+        setFinishes(null, next); edRender();
+      }, { id: 'ed-finish-default-' + i, label: 'Make ' + f.name + ' the default' }));
+      row.append(edButton('Remove', () => {
+        const showing = finishHex === String(f.color).toLowerCase();
+        const next = finishes().filter((_, j) => j !== i);
+        setFinishes(null, next);
+        if (showing) pickFinish(next[0].color);
+        edRender();
+      }, { id: 'ed-finish-rm-' + i, disabled: list.length === 1, label: 'Remove ' + f.name }));
+      card.append(row); wrap.append(card);
+    });
+    wrap.append(edButton('+ Add finish', () => {
+      setFinishes(null, finishes().concat([{ name: 'New finish', color: '#888888' }])); edRender();
+    }, { id: 'ed-finish-add', cls: 'add' }));
+    host.append(wrap);
+  }
+
+  // ----- Spec sheet -----
+  function specType(sec) { return sec.rows ? 'rows' : sec.items ? 'items' : 'text'; }
+  function specLines(sec) {
+    const lines = [];
+    (sec.rows || []).forEach((r) => lines.push(r[1] ? r[0] + ': ' + r[1] : String(r[0] || '')));
+    (sec.items || []).forEach((t) => lines.push(String(t)));
+    if (sec.text) String(sec.text).split(/\n+/).forEach((t) => lines.push(t));
+    return lines.filter((l) => l.trim());
+  }
+  // switch a section's type, carrying its text over line by line ("Label: value" for table rows)
+  function specAs(sec, type) {
+    const lines = specLines(sec), out = { title: sec.title || '' };
+    if (type === 'rows') out.rows = lines.length ? lines.map((l) => { const k = l.indexOf(':'); return k > 0 ? [l.slice(0, k).trim(), l.slice(k + 1).trim()] : [l.trim(), '']; }) : [['', '']];
+    else if (type === 'items') out.items = lines.length ? lines : [''];
+    else out.text = lines.join('\n');
+    return out;
+  }
+  function edSpecSection(host) {
+    const setSpec = (step, mutate) => applyEdit(step, (ed) => {
+      const next = JSON.parse(JSON.stringify(specSections()));
+      mutate(next);
+      if (JSON.stringify(next) === JSON.stringify(state.manifest.spec || [])) delete ed.lists.spec; else ed.lists.spec = next;
+    });
+    const structural = (mutate) => { setSpec(null, mutate); edRender(); };
+    const wrap = el('div'); wrap.className = 'ed-list';
+    specSections().forEach((sec, i) => {
+      const card = el('div'); card.className = 'ed-card';
+      const head = el('div'); head.className = 'ed-fields';
+      const title = edInput('ed-spec-title-' + i, sec.title || '', null, (v) => setSpec('spec:' + i + ':title', (l) => { l[i].title = v; }));
+      const t = specType(sec);
+      const type = document.createElement('select'); type.id = 'ed-spec-type-' + i;
+      type.append(opt('rows', 'Table rows', t === 'rows'), opt('items', 'Bullets', t === 'items'), opt('text', 'Paragraph', t === 'text'));
+      type.addEventListener('change', () => structural((l) => { l[i] = specAs(l[i], type.value); }));
+      head.append(fld('Section title', title, true), fld('Shown as', type, true));
+      const body = el('div'); body.className = 'ed-list';
+      if (t === 'rows') {
+        const cap = el('div'); cap.className = 'ed-pair'; cap.setAttribute('aria-hidden', 'true');
+        const c1 = el('span', 'Label'), c2 = el('span', 'Value'); c1.className = c2.className = 'fl';
+        cap.append(c1, c2); body.append(cap);
+        sec.rows.forEach((r, j) => {
+          const line = el('div'); line.className = 'ed-pair';
+          line.append(
+            edInput('ed-spec-' + i + '-label-' + j, r[0], 'Label, row ' + (j + 1), (v) => setSpec('spec:' + i + ':' + j + ':label', (l) => { l[i].rows[j][0] = v; })),
+            edInput('ed-spec-' + i + '-value-' + j, r[1], 'Value, row ' + (j + 1), (v) => setSpec('spec:' + i + ':' + j + ':value', (l) => { l[i].rows[j][1] = v; })),
+            edButton('Remove', () => structural((l) => { l[i].rows.splice(j, 1); }), { id: 'ed-spec-' + i + '-rm-' + j, label: 'Remove row ' + (j + 1) }));
+          body.append(line);
+        });
+        body.append(edButton('+ Add row', () => structural((l) => { l[i].rows.push(['', '']); }), { id: 'ed-spec-' + i + '-add', cls: 'add' }));
+      } else if (t === 'items') {
+        sec.items.forEach((item, j) => {
+          const line = el('div'); line.className = 'ed-one';
+          line.append(
+            edInput('ed-spec-' + i + '-item-' + j, item, 'Bullet ' + (j + 1), (v) => setSpec('spec:' + i + ':' + j + ':item', (l) => { l[i].items[j] = v; })),
+            edButton('Remove', () => structural((l) => { l[i].items.splice(j, 1); }), { id: 'ed-spec-' + i + '-rm-' + j, label: 'Remove bullet ' + (j + 1) }));
+          body.append(line);
+        });
+        body.append(edButton('+ Add bullet', () => structural((l) => { l[i].items.push(''); }), { id: 'ed-spec-' + i + '-add', cls: 'add' }));
+      } else {
+        const ta = document.createElement('textarea'); ta.id = 'ed-spec-text-' + i; ta.value = sec.text || '';
+        ta.addEventListener('input', () => setSpec('spec:' + i + ':text', (l) => { l[i].text = ta.value; }));
+        body.append(fld('Paragraph', ta, true));
+      }
+      const foot = el('div'); foot.className = 'ed-row';
+      const sp = el('span'); sp.className = 'grow';
+      foot.append(sp, edButton('Remove section', () => structural((l) => { l.splice(i, 1); }), { id: 'ed-spec-rm-' + i, label: 'Remove section ' + (sec.title || i + 1) }));
+      card.append(head, body, foot);
+      wrap.append(card);
+    });
+    const data = el('div'); data.className = 'ed-card';
+    const dr = el('div'); dr.className = 'ed-row';
+    const dt = el('span', 'Model data'); dt.className = 'grow';
+    const dm = el('span', 'Calculated from the model · always last'); dm.className = 'meta';
+    dr.append(dt, dm); data.append(dr); wrap.append(data);
+    wrap.append(edButton('+ Add section', () => structural((l) => { l.push({ title: 'New section', items: [''] }); }), { id: 'ed-spec-add', cls: 'add' }));
+    host.append(wrap);
   }
 
   // what differs from the loaded manifest, in words, for the change list and the section counts
@@ -1276,6 +1734,49 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       }
       if (e.inside !== undefined && e.inside !== base.inside) add('groups', g.label + ': see inside ' + (INSIDE_LABELS[base.inside] || 'automatic') + ' → ' + INSIDE_LABELS[e.inside]);
     });
+    if ('up' in ed.page && ed.page.up !== state.baseUp) add('page', 'Up axis: ' + state.baseUp.toUpperCase() + ' → ' + ed.page.up.toUpperCase());
+    state.parts.forEach((p) => {
+      const src = (ed.parts[p.id] || {}).source;
+      if (src) add('parts', p.name + ': source → ' + src.file + (src.kind === 'scad' && definesText(src.defines) ? ' (' + definesText(src.defines) + ')' : ''));
+    });
+    const L = ed.lists;
+    const titleOf = (n) => { const v = views().concat(baseViews()).find((x) => viewName(x) === n); return v ? viewLabel(v) : n; };
+    if (L.views) {
+      const b = baseViews(), bn = b.map(viewName), nn = L.views.map(viewName), before = out.length;
+      L.views.forEach((v) => {
+        const k = bn.indexOf(viewName(v));
+        if (k < 0) add('views', 'View added: ' + viewLabel(v));
+        else if (JSON.stringify(b[k]) !== JSON.stringify(v)) add('views', 'View ' + viewLabel(v) + ': camera changed');
+      });
+      b.forEach((v) => { if (!nn.includes(viewName(v))) add('views', (typeof v === 'string' ? 'View hidden: ' : 'View removed: ') + viewLabel(v)); });
+      if (out.length === before) add('views', 'Views reordered');
+    }
+    if ('defaultView' in ed.page) add('views', 'Opens on: ' + titleOf(state.manifest.defaultView || viewName(baseViews()[0])) + ' → ' + titleOf(ed.page.defaultView));
+    if (L.finishes) {
+      const b = baseFinishes(), bn = b.map((f) => f.name), nn = L.finishes.map((f) => f.name), before = out.length;
+      L.finishes.forEach((f) => {
+        const k = bn.indexOf(f.name);
+        if (k < 0) add('finishes', 'Finish added: ' + f.name);
+        else if (String(b[k].color).toLowerCase() !== String(f.color).toLowerCase()) add('finishes', f.name + ': ' + b[k].color + ' → ' + f.color);
+      });
+      b.forEach((f) => { if (!nn.includes(f.name)) add('finishes', 'Finish removed: ' + f.name); });
+      if (b[0] && L.finishes[0] && b[0].name !== L.finishes[0].name && bn.includes(L.finishes[0].name)) add('finishes', 'Opens with ' + L.finishes[0].name);
+      if (out.length === before) add('finishes', 'Finishes reordered');
+    }
+    if (L.spec) {
+      const b = state.manifest.spec || [], bt = b.map((x) => x.title), nt = L.spec.map((x) => x.title), before = out.length;
+      const name = (t) => t || '(untitled)';
+      const renamed = new Set(); // loaded sections accounted for as renamed
+      L.spec.forEach((x, i) => {
+        const k = bt.indexOf(x.title);
+        if (k >= 0) { if (JSON.stringify(b[k]) !== JSON.stringify(x)) add('spec', 'Section edited: ' + name(x.title)); return; }
+        // a new title in the place of a loaded section whose title is gone: a rename
+        if (b[i] && !nt.includes(b[i].title) && !renamed.has(i)) { renamed.add(i); add('spec', 'Section renamed: ' + name(b[i].title) + ' → ' + name(x.title)); }
+        else add('spec', 'Section added: ' + name(x.title));
+      });
+      b.forEach((x, i) => { if (!nt.includes(x.title) && !renamed.has(i)) add('spec', 'Section removed: ' + name(x.title)); });
+      if (out.length === before) add('spec', 'Sections reordered');
+    }
     return out;
   }
   function highlight(p, on) {
@@ -1287,7 +1788,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function el(tag, text) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; return e; }
   function renderSheet() {
     const host = $('sheet'); host.textContent = '';
-    (state.manifest.spec || []).forEach((sec) => {
+    specSections().forEach((sec) => {
       const s = el('section'); s.appendChild(el('h2', sec.title || ''));
       if (sec.rows) { const dl = el('dl'); sec.rows.forEach((r) => { dl.appendChild(el('dt', r[0])); dl.appendChild(el('dd', r[1])); }); s.appendChild(dl); }
       if (sec.items) { const ul = el('ul'); sec.items.forEach((i) => ul.appendChild(el('li', i))); s.appendChild(ul); }

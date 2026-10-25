@@ -228,6 +228,120 @@ test('manifest editor: shares edits and undo with Arrange, copies the manifest',
   }
 });
 
+const changeList = (page) => page.$$eval('#edChanges li', (l) => l.map((x) => x.textContent));
+const copiedManifest = async (page) => { await page.click('#edCopy'); return JSON.parse(await page.evaluate(() => navigator.clipboard.readText())); };
+
+test('manifest editor: parts, groups and the up axis', async () => {
+  const { ctx, page, errors } = await openDemo(VIEWPORTS[0], 'light', { permissions: ['clipboard-read', 'clipboard-write'] });
+  try {
+    await page.click('#edOpen');
+    await page.click('#ed-nav-parts');
+    assert.equal(await page.textContent('#ed-count-parts'), '9');
+    await page.click('#ed-part-edit-rj45');
+    assert.ok(await page.locator('#ed-part-id-rj45').evaluate((e) => e.readOnly), 'part ids are read-only');
+    await page.selectOption('#ed-part-mat-rj45', 'brass');
+    await page.click('#ed-part-edit-pipes');
+    await page.selectOption('#ed-part-group-pipes', 'board');
+    await page.fill('#ed-part-file-pipes', 'stl/pipes.stl');
+    await page.selectOption('#ed-part-src-pipes', 'scad');
+    assert.equal(await page.textContent('#ed-part-err-pipes'), 'Name the .scad file.');
+    await page.fill('#ed-part-file-pipes', 'case.scad');
+    await page.fill('#ed-part-defs-pipes', 'part pipes');
+    assert.match(await page.textContent('#ed-part-err-pipes'), /name = value/);
+    await page.fill('#ed-part-defs-pipes', 'part = "pipes", wall = 3');
+    assert.equal(await page.textContent('#ed-part-err-pipes'), '');
+    assert.deepEqual(await changeList(page), ['Light pipes: Lid → Board', 'RJ45 jack: Metal → Brass', 'Light pipes: source → case.scad (part = "pipes", wall = 3)']);
+
+    await page.click('#ed-nav-groups');
+    await page.fill('#ed-group-ex-z-lid', '50');
+    assert.equal(await page.getAttribute('#m-exploded', 'aria-pressed'), 'true', 'editing an offset shows the Exploded view');
+    assert.ok((await changeList(page)).includes('Lid: explode Z 44 → 50'));
+    await page.click('#ed-group-del-board');
+    assert.equal(await page.textContent('#ed-count-groups'), '9 · 1 changed', 'board parts (light pipes included) get groups of their own');
+    await page.click('#edUndo');
+    assert.equal(await page.textContent('#ed-count-groups'), '3 · 1 changed', 'undo brings the group back');
+
+    await page.click('#ed-nav-page');
+    await page.selectOption('#ed-page-up', 'y');
+    assert.equal(await page.textContent('#dims'), '70 × 22 × 50 mm', 'Y up turns the model');
+    assert.ok(await canvasColours(page) > 40, 'model still drawn after turning it');
+    const mf = await copiedManifest(page);
+    assert.equal(mf.up, 'y');
+    const pipes = mf.parts.find((p) => p.id === 'pipes');
+    assert.deepEqual([pipes.group, pipes.scad], ['board', { file: 'case.scad', defines: { part: 'pipes', wall: 3 } }]);
+    assert.equal(mf.parts.find((p) => p.id === 'rj45').material, 'brass');
+    assert.deepEqual(mf.groups.lid.explode, [0, 0, 50]);
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('manifest editor: views, finishes and the spec sheet', async () => {
+  const { ctx, page, errors } = await openDemo(VIEWPORTS[0], 'light', { permissions: ['clipboard-read', 'clipboard-write'] });
+  try {
+    await page.click('#edOpen');
+    await page.click('#ed-nav-views');
+    await page.uncheck('#ed-view-show-rear');
+    assert.equal(await page.locator('#v-rear').count(), 0, 'hidden view loses its button');
+    await page.click('#ed-view-add');
+    assert.equal(await page.locator('#v-view-1').count(), 1, 'new view gets a button');
+    await page.check('#ed-view-default-top');
+    assert.equal(await page.getAttribute('#v-top', 'aria-pressed'), 'true');
+    assert.deepEqual(await changeList(page), ['View added: View 1', 'View hidden: Rear', 'Opens on: 3/4 → Top']);
+
+    await page.click('#ed-nav-finishes');
+    await page.fill('#ed-finish-color-2', '#112233');
+    assert.equal(await page.locator('#f-slate-blue').evaluate((e) => e.style.background), 'rgb(17, 34, 51)');
+    await page.click('#ed-finish-add');
+    assert.equal(await page.locator('#f-new-finish').count(), 1);
+    await page.click('#ed-finish-default-1');
+    assert.equal(await page.locator('#finishes .swatch').first().getAttribute('id'), 'f-bone-white', 'Make default moves the swatch to the front');
+
+    await page.click('#ed-nav-spec');
+    await page.fill('#ed-spec-title-0', 'Dimensions');
+    assert.equal(await page.locator('#sheet h2').first().textContent(), 'Dimensions');
+    await page.selectOption('#ed-spec-type-1', 'rows');
+    assert.equal(await page.inputValue('#ed-spec-1-label-0'), 'RJ45, front (17 × 14.5 mm)', 'bullets carry over as rows');
+    assert.equal(await page.locator('#sheet section').nth(1).locator('dl').count(), 1);
+    await page.click('#ed-spec-add');
+    assert.equal(await page.locator('#sheet section').count(), 5, 'three sections, a new one, and Model data');
+    const specChanges = (await changeList(page)).filter((c) => /^Section/.test(c));
+    assert.deepEqual(specChanges, ['Section renamed: Size and fit → Dimensions', 'Section edited: Openings', 'Section added: New section']);
+    await page.screenshot({ path: path.join(SHOTS, 'editor-spec-desktop-light.png') });
+
+    const mf = await copiedManifest(page);
+    assert.equal(mf.defaultView, 'top');
+    assert.deepEqual(mf.views.map((v) => (typeof v === 'string' ? v : v.name)), ['front', 'left', 'top', 'iso', 'View 1']);
+    assert.deepEqual(mf.finishes.map((f) => f.name), ['Bone white', 'Graphite', 'Slate blue', 'New finish']);
+    assert.equal(mf.spec[0].title, 'Dimensions');
+    assert.ok(Array.isArray(mf.spec[1].rows));
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('manifest editor: sections fit a phone (dark)', async () => {
+  const { ctx, page, errors } = await openDemo(VIEWPORTS[1], 'dark');
+  try {
+    await page.click('#edOpen');
+    for (const id of ['parts', 'groups', 'views', 'finishes', 'spec']) {
+      await page.click('#ed-nav-' + id);
+      if (id === 'parts') await page.click('#ed-part-edit-lid');
+      const over = await page.evaluate(() => {
+        const main = document.getElementById('edMain');
+        return Math.max(document.documentElement.scrollWidth - window.innerWidth, main.scrollWidth - main.clientWidth);
+      });
+      assert.ok(over <= 1, `${id} section scrolls sideways by ${over}px`);
+      await page.screenshot({ path: path.join(SHOTS, `editor-${id}-phone-dark.png`) });
+    }
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
 // ---------- embedding API: a host page on another origin drives the viewer in an iframe ----------
 // The host is a second real server on another port, so a different origin. (A Playwright-routed origin
 // doesn't work: Chromium's local network access checks then refuse to frame localhost.)
