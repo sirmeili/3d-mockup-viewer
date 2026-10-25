@@ -37,7 +37,7 @@ The project turns 3D-printable enclosure designs into interactive, shareable moc
 
 ### Non-goals
 - **Not a CAD tool.** Geometry is never edited in the viewer. Shape changes happen in OpenSCAD (or the user's CAD tool) and are re-rendered.
-- **No server or storage of its own.** Files a user loads stay in the browser tab; nothing is uploaded. Saving belongs to the host: the file system, a host app, or (planned) artifact storage.
+- **No server-side communication.** Everything runs in the browser. The viewer only ever *reads* over the network: its pinned CDN scripts and fonts, and static files it is pointed at (URL mode, embedding `load`). It never uploads, posts or writes anything to a server. Files a user loads stay in the browser tab, and saving means a file on the user's own computer (planned item 3). Static hosting is all a deployment needs; `mockup serve` exists only because browsers restrict `file://`.
 - **No accounts, permissions or multi-user editing.** The viewer has no notion of a user.
 - **No slicing or print preparation.** Orientation, supports and printability are out of scope.
 - **No general-purpose model viewer features** such as measurement tools, annotations or animation timelines, unless a planned item adds them.
@@ -118,7 +118,7 @@ Node: `engines` requires 20.6 or newer; CI uses Node 22. The only dev dependency
 These come from where the pages are published, mainly Claude artifacts. Breaking them fails silently there, so they are hard rules for every page in `dist/`:
 
 1. External scripts only from cdnjs.cloudflare.com, cdn.jsdelivr.net/npm or unpkg.com, each pinned to an exact version. Stylesheets only from Google Fonts. Everything else inline.
-2. No `alert`, `confirm`, `prompt`, `window.print` or `<a download>`. Clipboard writes happen inside the click handler, with a fallback (Copy manifest shows the JSON in a text box when the clipboard is blocked).
+2. No `alert`, `confirm`, `prompt`, `window.print` or `<a download>`. (Planned item 3, Save, needs a controlled exception for self-hosted pages; see there.) Clipboard writes happen inside the click handler, with a fallback (Copy manifest shows the JSON in a text box when the clipboard is blocked).
 3. Colours are CSS custom properties on `:root`, redefined for dark mode under both `@media (prefers-color-scheme: dark) :root:not([data-theme="light"])` and `:root[data-theme="dark"]`. Components use only the tokens. three.js colours are converted from sRGB to linear (`lin()`), and the edge colour follows `--edge` when the theme changes.
 4. Works at about 400 px wide with no horizontal page scroll. Side gutters use `max(16px, env(safe-area-inset-left, 0px))`.
 5. `localStorage` holds only per-viewer conveniences (Arrange edits, which OpenSCAD panel sections are open). Every access is wrapped in try/catch, and the page works without it.
@@ -346,15 +346,16 @@ Today Arrange edits groups, explode offsets, see-inside behaviour, materials and
 - Edits are remembered per model in the browser like Arrange edits, and cleared by Reset.
 - Likely UI: an "Edit details" toggle on the spec panel that turns sections into inline fields, matching Arrange's labelled-field style.
 
-### 3. Save the manifest (not just copy it)
-Give the viewer a **Save** button beside **Copy manifest**, using the best method available where the page is running. Feature-detect, and fall back to the next method.
-- **Self-hosted with `mockup serve --writable`:** the CLI's server accepts `PUT` for `manifest.json` (and only files under the served folder). Save writes straight back to the project on disk, ready to commit. Off unless the flag is given.
-- **Embedded in a host app:** Save sends the manifest to the host (the embedding API's `change` / a `save` message), and the host stores it (e.g. the tracker writing to the project).
-- **Plain browser, self-hosted:** in Chromium, the File System Access API (`showSaveFilePicker`) saves `manifest.json` straight to a chosen file and remembers the handle for later saves. Elsewhere, a normal download.
-- **Inside Claude artifacts:** downloads are blocked there. Options are artifact storage (a "Saved mockups" list holding manifests, and optionally the part files, reopenable on any device; check which storage capability the account has) or keep Copy as the fallback.
+### 3. Save the manifest to a local file
+Give the viewer a **Save** button beside **Copy manifest** that writes `manifest.json` to the user's own computer, straight from the browser. No server is involved: the viewer never sends the manifest anywhere (section 2). Feature-detect and fall back in this order:
+- **File System Access API** (Chromium: `showSaveFilePicker`): the user picks where to save, typically the project's mockup folder. Later saves in the same session write to the same file without asking again.
+- **Download** (other browsers): `manifest.json` lands in the downloads folder.
+- **Copy manifest** where neither works, notably inside Claude artifacts, which block downloads and file pickers.
 - Show what happened ("Saved to manifest.json", "Downloaded", "Copied") and keep the in-browser edit memory in sync after a save.
-- **Tests:** a browser test for the `--writable` round trip (edit → Save → file on disk changed), and that Save is hidden or falls back where unsupported.
-- Depends on fixing the `mockup serve` path check first (open question 1).
+- **To decide before building:**
+  - Section 4 rule 2 forbids `<a download>` because it fails silently inside artifacts. Save needs an exception there, and a reliable way to tell it is running inside an artifact (or to detect that the save didn't happen) so it can fall back to Copy.
+  - Embedded viewers: the host can already read the manifest (`change` event, `getManifest`). Should Save also post a `save` message to the host page (browser to browser, no server), or behave exactly as above?
+- **Tests:** browser tests for each path: the file picker (stubbed in the test), the download (Playwright captures it and the test checks the JSON), and the Copy fallback where both are unavailable.
 
 ### 4. Manifest editor (full-screen dialog)
 A **Manifest editor** button opens a large dialog that edits everything a manifest can hold in one place. Arrange stays as it is, as the quick inline tool. The editor deliberately duplicates its features, so people can work in either.
@@ -405,7 +406,7 @@ A one-line way to put a small, read-only model view inside a document or page, l
 
 Found while writing this document. Each needs a decision; none has been changed.
 
-1. **`mockup serve` can serve files outside its folder.** The containment check is a string prefix test, and the path is URL-decoded after normalisation. Verified: serving `site/`, the request `GET /..%2Fsite-private/b.txt` returned a file from the sibling folder `site-private/`. The server also listens on every network interface, so this is reachable from the local network. Low impact today (a dev server, sibling folders whose names start with the served folder's name), but item 3 plans to let this server write files. Proposed fix: compare with `path.relative`, reject `..`, and listen on `localhost` by default with a flag for the network.
+1. **`mockup serve` can serve files outside its folder.** The containment check is a string prefix test, and the path is URL-decoded after normalisation. Verified: serving `site/`, the request `GET /..%2Fsite-private/b.txt` returned a file from the sibling folder `site-private/`. The server also listens on every network interface, so this is reachable from the local network. Low impact (a read-only dev server, and only sibling folders whose names start with the served folder's name). Proposed fix: compare with `path.relative`, reject `..`, and listen on `localhost` by default with a flag for the network.
 2. **Copied viewers report the wrong version.** `mockup viewer` and `mockup init` write the template's placeholder `<meta name="mockup-viewer-version" content="1.0">`; only `dist/` pages are stamped with the package version (0.1.0). The embedding API's `ready.viewerVersion` passes this value on. Should `renderPage` stamp the version?
 3. **Material guessing differs between the CLI and the viewer.** For a part name with no match, `mockup init` writes `plastic-white`, while the viewer gives an unmatched part a colour from a rotating palette. The keyword lists also differ slightly (the viewer also matches `esp`, `uext`, `shield`, `can`, `enclosure`). Should they share one rule?
 4. **No time limit on in-browser OpenSCAD renders.** A model that never finishes keeps a worker busy, and the Render button stays disabled. Add a per-job timeout (terminate and replace the worker)?

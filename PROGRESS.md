@@ -24,6 +24,7 @@
 | 2026-10-24 | Commands run one at a time, after the page's own model has loaded; `ready` is sent then. | No races between the page's initial load and host loads. |
 | 2026-10-24 | Embed browser tests use a second real local server, not a Playwright-routed origin. | Chromium's local network access checks block a routed "public" origin from framing localhost. |
 | 2026-10-24 | `docs/SPEC.md` is the project's source of truth; TODO.md folded into it and deleted. | Owner's request: one detailed spec drives the design. |
+| 2026-10-24 | Save (planned item 3) writes to a local file (file picker, download, else Copy); no `mockup serve --writable`, no artifact storage. The viewer never talks to a server beyond reading static files. | Owner: the program must run in the browser without server-side communication. |
 | 2026-10-24 | `<mockup-viewer>` custom element (optional in item 1) not built; noted under the inline-embed item. | Overlaps `<mockup-embed>`; better designed together. |
 
 ## Open questions
