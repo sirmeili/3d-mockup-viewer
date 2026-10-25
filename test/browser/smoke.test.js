@@ -322,6 +322,69 @@ test('manifest editor: views, finishes and the spec sheet', async () => {
   }
 });
 
+// drag a grip onto a point (fraction of the target's height) with the mouse
+async function mouseDrag(page, grip, target, frac) {
+  const a = await page.locator(grip).boundingBox(), b = await page.locator(target).boundingBox();
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height * frac, { steps: 8 });
+  await page.mouse.up();
+}
+const panelParts = (page) => page.$$eval('#parts .pname', (l) => l.map((x) => x.textContent));
+
+test('manifest editor: reorder by keyboard, buttons and drag', async () => {
+  const { ctx, page, errors } = await openDemo(VIEWPORTS[0], 'light', { permissions: ['clipboard-read', 'clipboard-write'] });
+  try {
+    await page.click('#edOpen');
+    await page.click('#ed-nav-parts');
+    // arrow keys on a grip; focus stays with the moved part
+    await page.focus('#ed-part-module-grip');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'ed-part-module-grip');
+    assert.deepEqual((await panelParts(page)).slice(3, 5), ['ESP32 module', 'ESP32 board'], 'the parts panel follows the new order');
+    // mouse drag into another group: light pipes onto the top half of the RJ45 card
+    await mouseDrag(page, '#ed-part-pipes-grip', '#ed-part-edit-rj45 >> xpath=../..', 0.25);
+    assert.ok((await changeList(page)).includes('Light pipes: Lid → Board'), 'dropping in another group moves the part there');
+
+    await page.click('#ed-nav-groups');
+    await page.click('#ed-group-lid-down');
+    assert.ok((await changeList(page)).includes('Groups reordered'));
+
+    await page.click('#ed-nav-finishes');
+    await page.focus('#ed-finish-2-grip');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'ed-finish-1-grip', 'focus follows the moved swatch');
+
+    await page.click('#ed-nav-views');
+    await mouseDrag(page, '#ed-view-iso-grip', '#ed-view-front-grip >> xpath=../..', 0.2);
+    assert.equal(await page.locator('#viewSeg button').first().getAttribute('id'), 'v-iso', '3/4 dragged to the front');
+
+    await page.click('#ed-nav-spec');
+    await page.focus('#ed-spec-0-row-0-grip');
+    await page.keyboard.press('ArrowDown');
+    assert.deepEqual(await page.$$eval('#sheet section:first-child dt', (l) => l.slice(0, 2).map((x) => x.textContent)), ['Board', 'Outside']);
+    // a touch drag: pointer events with pointerType touch, moving the Printing section to the top
+    const grip = page.locator('#ed-spec-sec-2-grip');
+    const a = await grip.boundingBox(), b = await page.locator('#ed-spec-title-0').boundingBox();
+    await grip.dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 7, button: 0, clientX: a.x + 5, clientY: a.y + 5, bubbles: true });
+    await grip.dispatchEvent('pointermove', { pointerType: 'touch', pointerId: 7, clientX: a.x + 5, clientY: b.y - 30, bubbles: true });
+    await grip.dispatchEvent('pointerup', { pointerType: 'touch', pointerId: 7, clientX: a.x + 5, clientY: b.y - 30, bubbles: true });
+    assert.equal(await page.locator('#sheet h2').first().textContent(), 'Printing');
+
+    const mf = await copiedManifest(page);
+    assert.deepEqual(Object.keys(mf.groups), ['base', 'board', 'lid'], 'group order kept in the manifest');
+    assert.deepEqual(mf.parts.map((p) => p.id), ['base', 'module', 'pcb', 'pipes', 'rj45', 'usbc', 'header', 'leds', 'lid'], 'parts listed group by group, in the shown order');
+    assert.deepEqual(mf.finishes.map((f) => f.name), ['Graphite', 'Slate blue', 'Bone white']);
+    assert.equal(mf.views[0], 'iso');
+    assert.equal(mf.spec[0].title, 'Printing');
+    await page.click('#edResetAll');
+    assert.deepEqual(await panelParts(page), ['Case base', 'Lid', 'Light pipes', 'ESP32 board', 'ESP32 module', 'RJ45 jack', 'USB-C port', 'UEXT header', 'Status LEDs'], 'Reset all restores the loaded order');
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
 test('manifest editor: sections fit a phone (dark)', async () => {
   const { ctx, page, errors } = await openDemo(VIEWPORTS[1], 'dark');
   try {

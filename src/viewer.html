@@ -227,6 +227,17 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 .ed-swatch { width: 40px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); flex: none; }
 .ed-badge { font: 11px var(--font-mono); letter-spacing: .04em; color: var(--accent); }
 .ed .add { justify-self: start; border-style: dashed; }
+/* reordering: a grip to drag (mouse, touch, pen; arrow keys when focused), a line where the item will land */
+.ed-handle {
+  display: inline-grid; place-items: center; width: 28px; height: 30px; padding: 0; flex: none;
+  color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: grab; touch-action: none;
+}
+.ed-handle:hover { color: var(--fg); border-color: var(--line); }
+.ed-handle svg { width: 14px; height: 14px; fill: currentColor; }
+.ed .dragging { opacity: .45; }
+.ed-drop { height: 3px; border-radius: 2px; background: var(--accent); }
+.ed-pair { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr) auto; }
+.ed-one { grid-template-columns: auto minmax(0, 1fr) auto; }
 .ed input[type="text"], .ed select {
   font: 13.5px/1.3 var(--font-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line);
   border-radius: 6px; padding: 7px 8px; width: 100%; box-sizing: border-box; min-width: 0;
@@ -730,11 +741,18 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   }
 
   // ---------- grouping, explode and materials (manifest values plus local edits) ----------
+  // Parts in their edited order (lists.partOrder); parts it doesn't name keep their loaded order, after it.
+  // Groups are ordered by their first part, so the part order sets the group order too.
+  function orderedParts() {
+    const order = state.edits.lists.partOrder || [];
+    const rank = (p, i) => { const k = order.indexOf(p.id); return k < 0 ? order.length + i : k; };
+    return state.parts.map((p, i) => [rank(p, i), p]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+  }
   function arrange() {
     const mf = state.manifest, ed = state.edits;
     state.groups.forEach((g) => assembly.remove(g.obj));
     state.groups = new Map();
-    state.parts.forEach((p) => {
+    orderedParts().forEach((p) => {
       const pe = ed.parts[p.id] || {};
       p.name = pe.name || p.baseName;
       const mk = pe.material || p.baseMat;
@@ -1144,10 +1162,14 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function currentManifest() {
     const mf = state.manifest;
     const out = JSON.parse(JSON.stringify(mf || {}));
-    Object.assign(out, JSON.parse(JSON.stringify(state.edits.page)), JSON.parse(JSON.stringify(state.edits.lists)));
+    Object.assign(out, JSON.parse(JSON.stringify(state.edits.page)));
+    ['views', 'finishes', 'spec'].forEach((k) => { if (state.edits.lists[k]) out[k] = JSON.parse(JSON.stringify(state.edits.lists[k])); });
     const baseParts = {}; (mf.parts || []).forEach((p) => { baseParts[p.id] = p; });
     out.up = state.up;
-    out.parts = state.parts.map((p) => {
+    // parts listed group by group, in the shown order: a viewer orders groups by their first part, so this keeps the group order too
+    const shown = [];
+    state.groups.forEach((g) => g.parts.forEach((p) => shown.push(p)));
+    out.parts = shown.map((p) => {
       const o = Object.assign({}, baseParts[p.id] || {}, { id: p.id, name: p.name, group: p.groupId, material: p.matKey });
       const scad = window.mockupScad && window.mockupScad.partScad ? window.mockupScad.partScad(p.id) : null;
       if (scad) { o.scad = scad; delete o.file; } else o.file = p.file;
@@ -1189,7 +1211,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   }
   $('arrCopy').addEventListener('click', () => copyManifest($('arrNote'), $('arrJson')));
   $('arrReset').addEventListener('click', () => {
-    applyEdit(null, (ed) => { ed.parts = {}; ed.groups = {}; });
+    applyEdit(null, (ed) => { ed.parts = {}; ed.groups = {}; delete ed.lists.partOrder; });
     $('arrNote').textContent = 'Back to the original arrangement.';
   });
 
@@ -1208,35 +1230,35 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     {
       id: 'parts', title: 'Parts', count: () => String(state.parts.length),
       help: ['Parts are the separate pieces of the model: one per STL file, 3MF object, GLB mesh or OpenSCAD part. Each part sits in a group, and everything in a group moves together in the Exploded view.',
-        'choose Edit on a part to change its name, group, colour or source. The id can\'t be changed: it names the part\'s default file and the edits remembered in this browser. A new source is written to the manifest; the 3D view keeps the shapes already loaded until you load the files again.'],
+        'drag a part by its grip to reorder it or drop it into another group, or use the arrow buttons (or the arrow keys on the grip). Choose Edit to change its name, group, colour or source. The id can\'t be changed: it names the part\'s default file and the edits remembered in this browser. A new source is written to the manifest; the 3D view keeps the shapes already loaded until you load the files again.'],
       render: edPartsSection,
-      reset: (ed) => { ed.parts = {}; }
+      reset: (ed) => { ed.parts = {}; delete ed.lists.partOrder; }
     },
     {
       id: 'groups', title: 'Groups', count: () => String(state.groups.size),
       help: ['Groups are parts that move together. Each has a name, how far it moves in the Exploded view, and what it does in See inside.',
-        'set the offsets in the model\'s units along each axis; the model switches to Exploded so you can see it. Delete group puts its parts into groups of their own. To start a new group, choose "New group…" for a part in Parts or Arrange.'],
+        'drag a group by its grip, or use the arrow buttons, to change the order. Set the offsets in the model\'s units along each axis; the model switches to Exploded so you can see it. Delete group puts its parts into groups of their own. To start a new group, choose "New group…" for a part in Parts or Arrange.'],
       render: edGroupsSection,
-      reset: (ed) => { ed.groups = {}; }
+      reset: (ed) => { ed.groups = {}; delete ed.lists.partOrder; }
     },
     {
       id: 'views', title: 'Views', count: () => String(views().length),
       help: ['Views are the camera buttons under the model. Choose which ones appear and which one the page opens on.',
-        'tick a stock view to show it and untick it to hide it. To add your own angle, turn the model in the preview to the shot you want and press "Add view from current camera". New views go at the end.'],
+        'tick a stock view to show it and untick it to hide it. To add your own angle, turn the model in the preview to the shot you want and press "Add view from current camera". Drag a view by its grip, or use the arrow buttons, to change the order of the buttons.'],
       render: edViewsSection,
       reset: (ed) => { delete ed.lists.views; delete ed.page.defaultView; }
     },
     {
       id: 'finishes', title: 'Finishes', count: () => String(finishes().length),
       help: ['Finishes are the colour swatches. Each one recolours every part whose material is "Finish colour", so you can compare filament colours.',
-        'change a swatch\'s name or colour, remove it, or add one. The first swatch is the one the page opens with; "Make default" moves a swatch to the front.'],
+        'change a swatch\'s name or colour, remove it, or add one, and drag it by its grip (or use the arrow buttons) to reorder. The first swatch is the one the page opens with; "Make default" moves a swatch to the front.'],
       render: edFinishesSection,
       reset: (ed) => { delete ed.lists.finishes; }
     },
     {
       id: 'spec', title: 'Spec sheet', count: () => String(specSections().length),
       help: ['The spec sheet is the panel beside the parts list: sizes, ports, mounting, print notes. It is made of sections, and each section is a table of label/value rows, a bullet list, or a paragraph.',
-        'edit titles and text in place. Change a section\'s type with "Shown as"; its text carries over. "Model data" is calculated from the model and can\'t be edited.'],
+        'edit titles and text in place. Drag a section, row or bullet by its grip to reorder it (sections also have arrow buttons, and every grip takes the arrow keys). Change a section\'s type with "Shown as"; its text carries over. "Model data" is calculated from the model and can\'t be edited.'],
       render: edSpecSection,
       reset: (ed) => { delete ed.lists.spec; }
     }
@@ -1271,7 +1293,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function edRender() {
     if (!$('editor').open) return;
     const active = document.activeElement;
-    const focusId = active && $('editor').contains(active) ? active.id : null;
+    const focusId = edFocusAfter || (active && $('editor').contains(active) ? active.id : null);
+    edFocusAfter = null;
     const scroll = $('edMain').scrollTop;
     const nav = $('edNav'); nav.textContent = '';
     ED_SECTIONS.forEach((s) => {
@@ -1352,6 +1375,88 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     host.appendChild(grid);
   }
 
+  // ----- reordering: drag handles (mouse, touch and pen), arrow keys on the handle, and up/down buttons -----
+  let edFocusAfter = null; // id to focus after the next redraw, so focus follows an item moved from the keyboard
+  const GRIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+  function moveItem(arr, from, to) { const a = arr.slice(); a.splice(to, 0, a.splice(from, 1)[0]); return a; }
+  // A drag handle. Sortable lists are elements with data-sort-list="<scope>" and their items have data-sort="<scope>".
+  // drop(list, index) gets the list under the pointer and the index among its items, not counting the dragged one.
+  // step(-1 | 1) moves the item from the keyboard.
+  function edHandle(id, label, item, scope, drop, step) {
+    const h = document.createElement('button'); h.type = 'button'; h.className = 'ed-handle'; h.id = id;
+    h.setAttribute('aria-label', 'Reorder ' + label + ': drag, or use the up and down arrow keys');
+    h.innerHTML = GRIP;
+    h.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      step(e.key === 'ArrowUp' ? -1 : 1);
+    });
+    h.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      try { h.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
+      const main = $('edMain');
+      const lists = Array.from(main.querySelectorAll('[data-sort-list="' + scope + '"]'));
+      const marker = el('div'); marker.className = 'ed-drop'; marker.setAttribute('aria-hidden', 'true');
+      item.classList.add('dragging');
+      let target = null;
+      const place = (y) => {
+        const r = main.getBoundingClientRect();
+        if (y < r.top + 40) main.scrollTop -= 12; else if (y > r.bottom - 40) main.scrollTop += 12;
+        let list = null, best = Infinity;
+        lists.forEach((l) => {
+          const b = l.getBoundingClientRect();
+          const d = y < b.top ? b.top - y : y > b.bottom ? y - b.bottom : 0;
+          if (d < best) { best = d; list = l; }
+        });
+        const items = Array.from(list.children).filter((c) => c.dataset.sort === scope && c !== item);
+        let index = items.findIndex((c) => { const b = c.getBoundingClientRect(); return y < b.top + b.height / 2; });
+        if (index < 0) index = items.length;
+        target = { list, index };
+        if (index < items.length) list.insertBefore(marker, items[index]);
+        else if (items.length) items[items.length - 1].after(marker);
+        else list.appendChild(marker);
+      };
+      const move = (ev) => place(ev.clientY);
+      const finish = (commit) => {
+        h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', cancel);
+        item.classList.remove('dragging'); marker.remove();
+        if (commit && target) { edFocusAfter = id; drop(target.list, target.index); }
+      };
+      const up = () => finish(true);
+      const cancel = () => finish(false);
+      h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', cancel);
+    });
+    return h;
+  }
+  const ICON_UP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
+  const ICON_DOWN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  // Move up / Move down buttons for item i of n; step(-1 | 1) does the move
+  function edMoveButtons(idBase, label, i, n, step) {
+    const up = edButton('', () => step(-1), { id: idBase + '-up', cls: 'icon', label: 'Move ' + label + ' up', disabled: i === 0 });
+    const down = edButton('', () => step(1), { id: idBase + '-down', cls: 'icon', label: 'Move ' + label + ' down', disabled: i === n - 1 });
+    up.innerHTML = ICON_UP; down.innerHTML = ICON_DOWN;
+    return [up, down];
+  }
+
+  // the parts of each group in the shown order: [[groupId, [partId…]], …]
+  function partLayout() { return Array.from(state.groups.values()).map((g) => [g.id, g.parts.map((p) => p.id)]); }
+  // apply a new layout: parts that changed group get a group edit, and the flattened ids become the part order
+  function setPartLayout(ed, layout) {
+    layout.forEach(([gid, ids]) => ids.forEach((id) => {
+      const p = state.parts.find((q) => q.id === id);
+      if (p.groupId !== gid) setPartEdit(ed, p, 'group', gid, p.baseGroup);
+    }));
+    const order = [].concat(...layout.map((x) => x[1]));
+    if (JSON.stringify(order) === JSON.stringify(state.parts.map((p) => p.id))) delete ed.lists.partOrder; else ed.lists.partOrder = order;
+  }
+  // the order the loaded manifest gives, grouped as now: Map(groupId -> [partId…]), groups by first part
+  function naturalLayout() {
+    const nat = new Map();
+    state.parts.forEach((p) => { if (!nat.has(p.groupId)) nat.set(p.groupId, []); nat.get(p.groupId).push(p.id); });
+    return nat;
+  }
+
   // ----- Parts -----
   let edOpenPart = null;
   // set one field of a part's edits; a value equal to the loaded one removes the edit
@@ -1385,17 +1490,32 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function edPartsSection(host) {
     state.groups.forEach((g) => {
       const list = el('div'); list.className = 'ed-list';
+      list.dataset.sortList = 'parts'; list.dataset.group = g.id;
       const head = el('div'); head.className = 'fl';
       head.append(el('span', g.label), el('span', g.parts.length + (g.parts.length === 1 ? ' part' : ' parts')));
       list.appendChild(head);
-      g.parts.forEach((p) => list.appendChild(edPartCard(p)));
+      g.parts.forEach((p, i) => list.appendChild(edPartCard(p, i, g)));
       host.appendChild(list);
     });
   }
-  function edPartCard(p) {
+  function edPartCard(p, i, g) {
     const open = edOpenPart === p.id;
     const src = partSource(p);
-    const card = el('div'); card.className = 'ed-card' + (open ? ' open' : '');
+    const card = el('div'); card.className = 'ed-card' + (open ? ' open' : ''); card.dataset.sort = 'parts';
+    const grip = 'ed-part-' + p.id + '-grip';
+    const step = (d) => {
+      const layout = partLayout(), ids = layout.find((x) => x[0] === g.id)[1], k = ids.indexOf(p.id);
+      if (k + d < 0 || k + d >= ids.length) return;
+      layout.find((x) => x[0] === g.id)[1] = moveItem(ids, k, k + d);
+      edFocusAfter = grip;
+      edStructural((ed) => setPartLayout(ed, layout));
+    };
+    // dropped into a group's list: take it out of its own, put it in at that place
+    const drop = (list, index) => {
+      const layout = partLayout().map(([gid, ids]) => [gid, ids.filter((x) => x !== p.id)]);
+      layout.find((x) => x[0] === list.dataset.group)[1].splice(index, 0, p.id);
+      edStructural((ed) => setPartLayout(ed, layout.filter((x) => x[1].length)));
+    };
     const row = el('div'); row.className = 'ed-row';
     const dot = el('span'); dot.className = 'dot'; dot.style.background = swatchHex(p);
     const name = el('span', p.name); name.className = 'grow';
@@ -1404,7 +1524,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const edit = edButton(open ? 'Close' : 'Edit', () => { edOpenPart = open ? null : p.id; edRender(); },
       { id: 'ed-part-edit-' + p.id, label: (open ? 'Close ' : 'Edit ') + p.name });
     edit.setAttribute('aria-expanded', String(open));
-    row.append(dot, name, mat, where, edit);
+    row.append(edHandle(grip, p.name, card, 'parts', drop, step), dot, name, mat, where,
+      ...edMoveButtons('ed-part-' + p.id, p.name, i, g.parts.length, step), edit);
     card.appendChild(row);
     card.addEventListener('mouseenter', () => highlight(p, true));
     card.addEventListener('mouseleave', () => highlight(p, false));
@@ -1472,9 +1593,20 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
   // ----- Groups -----
   function edGroupsSection(host) {
-    const list = el('div'); list.className = 'ed-list';
-    state.groups.forEach((g) => {
-      const card = el('div'); card.className = 'ed-card';
+    const list = el('div'); list.className = 'ed-list'; list.dataset.sortList = 'groups';
+    const count = state.groups.size;
+    Array.from(state.groups.values()).forEach((g, gi) => {
+      const card = el('div'); card.className = 'ed-card'; card.dataset.sort = 'groups';
+      const grip = 'ed-group-' + g.id + '-grip';
+      const step = (d) => {
+        if (gi + d < 0 || gi + d >= count) return;
+        edFocusAfter = grip;
+        edStructural((ed) => setPartLayout(ed, moveItem(partLayout(), gi, gi + d)));
+      };
+      const top = el('div'); top.className = 'ed-row';
+      const title = el('span', g.label); title.className = 'grow';
+      top.append(edHandle(grip, g.label, card, 'groups', (l, index) => edStructural((ed) => setPartLayout(ed, moveItem(partLayout(), gi, index))), step),
+        title, ...edMoveButtons('ed-group-' + g.id, g.label, gi, count, step));
       const grid = el('div'); grid.className = 'ed-fields';
       const lab = edInput('ed-group-label-' + g.id, g.label, null, (v) => applyEdit('group:' + g.id + ':label', (ed) => {
         ed.groups[g.id] = Object.assign({}, ed.groups[g.id], { label: v.trim() || g.id });
@@ -1511,7 +1643,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
         g.parts.forEach((p) => setPartEdit(ed, p, 'group', p.id, p.baseGroup));
         delete ed.groups[g.id];
       }), { id: 'ed-group-del-' + g.id, disabled: alone, label: 'Delete group ' + g.label }));
-      card.append(grid, row);
+      card.append(top, grid, row);
       list.append(card);
     });
     host.append(list);
@@ -1534,12 +1666,25 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       if (ed.page.defaultView && !next.some((v) => viewName(v) === ed.page.defaultView)) delete ed.page.defaultView;
     });
     const wrap = el('div'); wrap.className = 'ed-list';
+    const shownList = el('div'); shownList.className = 'ed-list'; shownList.dataset.sortList = 'views';
+    const hiddenList = el('div'); hiddenList.className = 'ed-list';
+    wrap.append(shownList, hiddenList);
     const rows = list.map((v, i) => ({ v, i, shown: true }))
       .concat(Object.keys(STOCK_VIEWS).filter((n) => !names.includes(n)).map((n) => ({ v: n, i: -1, shown: false })));
     rows.forEach(({ v, i, shown }) => {
       const n = viewName(v);
       const card = el('div'); card.className = 'ed-card';
       const row = el('div'); row.className = 'ed-row';
+      if (shown) {
+        card.dataset.sort = 'views';
+        const grip = 'ed-view-' + n + '-grip';
+        const step = (d) => {
+          if (i + d < 0 || i + d >= list.length) return;
+          edFocusAfter = grip; setViews(null, moveItem(list, i, i + d)); edRender();
+        };
+        row.append(edHandle(grip, viewLabel(v), card, 'views', (l, index) => { setViews(null, moveItem(list, i, index)); edRender(); }, step),
+          ...edMoveButtons('ed-view-' + n, viewLabel(v), i, list.length, step));
+      }
       if (typeof v === 'string') {
         const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'ed-view-show-' + n; cb.checked = shown;
         cb.disabled = shown && list.length === 1;
@@ -1570,7 +1715,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       });
       const rl = document.createElement('label'); rl.className = 'toggle'; rl.append(rd, 'Opens on');
       row.append(rl);
-      card.append(row); wrap.append(card);
+      card.append(row); (shown ? shownList : hiddenList).append(card);
     });
     wrap.append(edButton('+ Add view from current camera', () => {
       let k = 1; while (list.some((v) => typeof v === 'object' && slug(v.name) === 'view-' + k)) k++;
@@ -1585,10 +1730,16 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const setFinishes = (step, next) => applyEdit(step, (ed) => {
       if (JSON.stringify(next) === JSON.stringify(baseFinishes())) delete ed.lists.finishes; else ed.lists.finishes = next;
     });
-    const wrap = el('div'); wrap.className = 'ed-list';
+    const wrap = el('div'); wrap.className = 'ed-list'; wrap.dataset.sortList = 'finishes';
     list.forEach((f, i) => {
-      const card = el('div'); card.className = 'ed-card';
+      const card = el('div'); card.className = 'ed-card'; card.dataset.sort = 'finishes';
       const row = el('div'); row.className = 'ed-row';
+      const step = (d) => {
+        if (i + d < 0 || i + d >= list.length) return;
+        edFocusAfter = 'ed-finish-' + (i + d) + '-grip'; setFinishes(null, moveItem(finishes(), i, i + d)); edRender();
+      };
+      const drop = (l, index) => { edFocusAfter = 'ed-finish-' + index + '-grip'; setFinishes(null, moveItem(finishes(), i, index)); edRender(); };
+      row.append(edHandle('ed-finish-' + i + '-grip', f.name, card, 'finishes', drop, step));
       const col = document.createElement('input'); col.type = 'color'; col.className = 'ed-swatch'; col.id = 'ed-finish-color-' + i;
       col.value = '#' + new THREE.Color(f.color).getHexString(); col.setAttribute('aria-label', 'Colour of ' + f.name);
       col.addEventListener('input', () => {
@@ -1614,7 +1765,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
         setFinishes(null, next);
         if (showing) pickFinish(next[0].color);
         edRender();
-      }, { id: 'ed-finish-rm-' + i, disabled: list.length === 1, label: 'Remove ' + f.name }));
+      }, { id: 'ed-finish-rm-' + i, disabled: list.length === 1, label: 'Remove ' + f.name }),
+      ...edMoveButtons('ed-finish-' + i, f.name, i, list.length, step));
       card.append(row); wrap.append(card);
     });
     wrap.append(edButton('+ Add finish', () => {
@@ -1647,9 +1799,15 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       if (JSON.stringify(next) === JSON.stringify(state.manifest.spec || [])) delete ed.lists.spec; else ed.lists.spec = next;
     });
     const structural = (mutate) => { setSpec(null, mutate); edRender(); };
-    const wrap = el('div'); wrap.className = 'ed-list';
+    const wrap = el('div'); wrap.className = 'ed-list'; wrap.dataset.sortList = 'spec';
+    const total = specSections().length;
     specSections().forEach((sec, i) => {
-      const card = el('div'); card.className = 'ed-card';
+      const card = el('div'); card.className = 'ed-card'; card.dataset.sort = 'spec';
+      const step = (d) => {
+        if (i + d < 0 || i + d >= total) return;
+        edFocusAfter = 'ed-spec-sec-' + (i + d) + '-grip'; structural((l) => moveItem(l, i, i + d).forEach((x, k) => { l[k] = x; }));
+      };
+      const dropSec = (l0, index) => { edFocusAfter = 'ed-spec-sec-' + index + '-grip'; structural((l) => moveItem(l, i, index).forEach((x, k) => { l[k] = x; })); };
       const head = el('div'); head.className = 'ed-fields';
       const title = edInput('ed-spec-title-' + i, sec.title || '', null, (v) => setSpec('spec:' + i + ':title', (l) => { l[i].title = v; }));
       const t = specType(sec);
@@ -1658,13 +1816,22 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       type.addEventListener('change', () => structural((l) => { l[i] = specAs(l[i], type.value); }));
       head.append(fld('Section title', title, true), fld('Shown as', type, true));
       const body = el('div'); body.className = 'ed-list';
+      // a row or bullet j of n in this section: grip that drags within the section or moves with the arrow keys
+      const lineGrip = (kind, key, j, n, line, label) => {
+        const id = 'ed-spec-' + i + '-' + kind + '-' + j + '-grip';
+        const go = (to) => { edFocusAfter = 'ed-spec-' + i + '-' + kind + '-' + to + '-grip'; structural((l) => { l[i][key] = moveItem(l[i][key], j, to); }); };
+        return edHandle(id, label, line, 'spec-' + kind + '-' + i, (l0, index) => go(index), (d) => { if (j + d >= 0 && j + d < n) go(j + d); });
+      };
+      if (t === 'rows') body.dataset.sortList = 'spec-row-' + i;
+      if (t === 'items') body.dataset.sortList = 'spec-bullet-' + i;
       if (t === 'rows') {
         const cap = el('div'); cap.className = 'ed-pair'; cap.setAttribute('aria-hidden', 'true');
         const c1 = el('span', 'Label'), c2 = el('span', 'Value'); c1.className = c2.className = 'fl';
-        cap.append(c1, c2); body.append(cap);
+        cap.append(el('span'), c1, c2); body.append(cap);
         sec.rows.forEach((r, j) => {
-          const line = el('div'); line.className = 'ed-pair';
+          const line = el('div'); line.className = 'ed-pair'; line.dataset.sort = 'spec-row-' + i;
           line.append(
+            lineGrip('row', 'rows', j, sec.rows.length, line, 'row ' + (j + 1)),
             edInput('ed-spec-' + i + '-label-' + j, r[0], 'Label, row ' + (j + 1), (v) => setSpec('spec:' + i + ':' + j + ':label', (l) => { l[i].rows[j][0] = v; })),
             edInput('ed-spec-' + i + '-value-' + j, r[1], 'Value, row ' + (j + 1), (v) => setSpec('spec:' + i + ':' + j + ':value', (l) => { l[i].rows[j][1] = v; })),
             edButton('Remove', () => structural((l) => { l[i].rows.splice(j, 1); }), { id: 'ed-spec-' + i + '-rm-' + j, label: 'Remove row ' + (j + 1) }));
@@ -1673,8 +1840,9 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
         body.append(edButton('+ Add row', () => structural((l) => { l[i].rows.push(['', '']); }), { id: 'ed-spec-' + i + '-add', cls: 'add' }));
       } else if (t === 'items') {
         sec.items.forEach((item, j) => {
-          const line = el('div'); line.className = 'ed-one';
+          const line = el('div'); line.className = 'ed-one'; line.dataset.sort = 'spec-bullet-' + i;
           line.append(
+            lineGrip('bullet', 'items', j, sec.items.length, line, 'bullet ' + (j + 1)),
             edInput('ed-spec-' + i + '-item-' + j, item, 'Bullet ' + (j + 1), (v) => setSpec('spec:' + i + ':' + j + ':item', (l) => { l[i].items[j] = v; })),
             edButton('Remove', () => structural((l) => { l[i].items.splice(j, 1); }), { id: 'ed-spec-' + i + '-rm-' + j, label: 'Remove bullet ' + (j + 1) }));
           body.append(line);
@@ -1687,7 +1855,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       }
       const foot = el('div'); foot.className = 'ed-row';
       const sp = el('span'); sp.className = 'grow';
-      foot.append(sp, edButton('Remove section', () => structural((l) => { l.splice(i, 1); }), { id: 'ed-spec-rm-' + i, label: 'Remove section ' + (sec.title || i + 1) }));
+      foot.append(edHandle('ed-spec-sec-' + i + '-grip', sec.title || 'section ' + (i + 1), card, 'spec', dropSec, step),
+        ...edMoveButtons('ed-spec-sec-' + i, sec.title || 'section ' + (i + 1), i, total, step), sp, edButton('Remove section', () => structural((l) => { l.splice(i, 1); }), { id: 'ed-spec-rm-' + i, label: 'Remove section ' + (sec.title || i + 1) }));
       card.append(head, body, foot);
       wrap.append(card);
     });
@@ -1776,6 +1945,15 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       });
       b.forEach((x, i) => { if (!nt.includes(x.title) && !renamed.has(i)) add('spec', 'Section removed: ' + name(x.title)); });
       if (out.length === before) add('spec', 'Sections reordered');
+    }
+    if (L.partOrder) {
+      // compared with the loaded order, grouped as now
+      const nat = naturalLayout(), cur = partLayout();
+      const natG = Array.from(nat.keys()), curG = cur.map((x) => x[0]);
+      if (JSON.stringify(natG) !== JSON.stringify(curG)) add('groups', 'Groups reordered');
+      cur.forEach(([gid, ids]) => {
+        if (JSON.stringify(nat.get(gid) || []) !== JSON.stringify(ids)) add('parts', groupLabel(gid) + ': parts reordered');
+      });
     }
     return out;
   }

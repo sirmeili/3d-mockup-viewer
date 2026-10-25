@@ -8,7 +8,7 @@
   - Browser tests: test host on a second local server; URL load, bytes load, controls, Arrange edit → `change`, origin rejection, OpenSCAD values + render.
 
 ## In progress
-- 2026-10-24: Planned item 4, manifest editor (branch `feat/manifest-editor`). Phases 1 and 2 done: shared edits (parts, groups, page, lists), undo history, dialog with live preview and change list, and all six sections (Page with up axis, Parts, Groups, Views, Finishes, Spec sheet). Phase 3 next: drag-and-drop reordering with keyboard alternatives.
+- 2026-10-24: Planned item 4, manifest editor (branch `feat/manifest-editor`). Phases 1 and 2 done: shared edits (parts, groups, page, lists), undo history, dialog with live preview and change list, and all six sections (Page with up axis, Parts, Groups, Views, Finishes, Spec sheet). Phase 3 done: reordering by drag (mouse, touch, pen), arrow keys on grips and up/down buttons, stored as one part order. Phase 4 next: the Raw JSON section.
 
 ## Next
 - Tracker side (in `ai-project-tracker`, its own backlog): where mockups live and how an item shows one. It has no mockup or file storage yet.
