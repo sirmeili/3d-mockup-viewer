@@ -77,7 +77,7 @@ Source lives in `src/`: `viewer.html` (the viewer and its template), `scad-addon
 
 ## Roadmap
 
-Planned work is tracked in [TODO.md](TODO.md).
+The design, current behaviour and planned work are specified in [docs/SPEC.md](docs/SPEC.md).
 
 ## How this was built
 
@@ -86,7 +86,7 @@ This project was built with [Claude](https://claude.ai) (Anthropic) as an engine
 - **Human-directed design.** Requirements, scope and every design decision came from the maintainer and were refined over several review rounds. Examples include the Arrange editor, collapsible parameters, field labels, the split into a light viewer and an OpenSCAD edition, and the licensing.
 - **Tested, not assumed.** `npm test` covers building, OpenSCAD rendering, fonts and STL handling. `npm run test:browser` loads every built page in headless Chromium at desktop and phone widths, in light and dark mode. It checks that the model is actually drawn, nothing errors or scrolls sideways, the exploded, see-inside, section and Arrange views work, and the OpenSCAD edition re-renders all parts after a value changes.
 - **Continuous integration.** Every push runs both test suites and a full build on GitHub Actions, and keeps the screenshots for review. A release is only published if they pass. Releases are tagged versions, so other projects pin exactly what they use.
-- **Documented for humans and agents.** [docs/manifest.md](docs/manifest.md) specifies the data format. [CLAUDE.md](CLAUDE.md) records the architecture, constraints and release steps so future sessions work from the same ground truth instead of guessing.
+- **Documented for humans and agents.** [docs/SPEC.md](docs/SPEC.md) specifies the project and drives its design; [docs/manifest.md](docs/manifest.md) specifies the data format. [CLAUDE.md](CLAUDE.md) records the architecture, constraints and release steps so future sessions work from the same ground truth instead of guessing.
 - **Pinned dependencies and tracked licences.** Runtime libraries are pinned to exact versions, and third-party licences are listed in [THIRD_PARTY.md](THIRD_PARTY.md).
 - **Traceable history.** Commits written with Claude carry a `Co-Authored-By: Claude` trailer.
 

@@ -1,10 +1,12 @@
 # 3D Mockup Viewer: notes for Claude
 
+**Source of truth:** `docs/SPEC.md` defines the project: scope, behaviour, rules, planned work and open questions. Read it before changing behaviour. If code and spec disagree, raise it rather than picking one. Update the spec in the same change as the behaviour it describes.
+
 Interactive 3D mockups for 3D-printed enclosures. One viewer page (three.js), an optional OpenSCAD add-on, and a Node CLI that bakes mockups into single HTML files. The owner uses it for hardware projects (ESP32 enclosures designed in OpenSCAD) and embeds it in other repos.
 
 ## Layout
 
-- `src/viewer.html`: the viewer **and** the template. Plain HTML fragment (no doctype/head/body). Claude artifacts wrap it in a skeleton at publish time, so keep it that way. Two markers matter:
+- `src/viewer.html`: the viewer **and** the template. Plain HTML fragment (no doctype/head/body). Claude artifacts wrap it in a skeleton at publish time, so keep it that way. Three markers matter:
   - `<script id="mockup-data" type="application/json">null</script>`: the build replaces `null` with `{manifest, files: {name: base64}, dropIn, scad?}`.
   - `<!-- EDITION-SLOT -->`: edition add-ons are inserted here.
   - It exposes `window.mockupViewer` (buildModel, warn, setLoading…) and calls `window.mockupScad` hooks if present.
@@ -21,7 +23,7 @@ Interactive 3D mockups for 3D-printed enclosures. One viewer page (three.js), an
 
 ## Planned work
 
-See `TODO.md`. Keep it current: tick off or remove items in the same change that does them.
+In `docs/SPEC.md`, section "Planned work". Keep it current: remove items (and add what they built to the spec's other sections) in the same change that does them. Decisions on the spec's open questions go into the spec too.
 
 ## Commands
 

@@ -130,5 +130,5 @@ A breaking change to the protocol increases `version`. The viewer answers a diff
 ## Notes
 
 - Arrange edits are still remembered in the viewer's browser storage per model, as they are when the viewer isn't embedded. `getManifest()` and `change` include them, so the host can save the manifest and later reload it with the edits built in.
-- The viewer shows its normal page, header and spec sheet included. A compact display-only embed is planned separately (TODO.md).
+- The viewer shows its normal page, header and spec sheet included. A compact display-only embed is planned separately ([SPEC.md](SPEC.md), planned work item 5).
 - Query strings don't reach pages inside Claude artifacts, so the published artifacts can't be embedded this way.
