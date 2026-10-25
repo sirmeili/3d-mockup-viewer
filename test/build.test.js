@@ -62,3 +62,10 @@ test('empty viewer keeps a null data tag for URL loading', () => {
   assert.match(html, /<script id="mockup-data" type="application\/json">null<\/script>/);
   assert.ok(html.includes("get('manifest')"));
 });
+
+test('embed origins are written into the page; embedding is off by default', () => {
+  assert.match(renderPage({ data: null }), /<meta name="mockup-embed-origins" content="">/);
+  const html = renderPage({ data: null, embedOrigins: ['https://tracker.lan/some/path', 'http://localhost:5173'] });
+  assert.match(html, /<meta name="mockup-embed-origins" content="https:\/\/tracker\.lan http:\/\/localhost:5173">/);
+  assert.throws(() => renderPage({ data: null, embedOrigins: ['javascript:alert(1)'] }), /http or https/);
+});

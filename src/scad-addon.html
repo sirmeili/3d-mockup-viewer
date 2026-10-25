@@ -416,6 +416,27 @@
       const v = S.scadById[id];
       return v ? JSON.parse(JSON.stringify(v)) : null;
     },
+    // embedding API: set editable values by name, all or nothing; returns every current value
+    setValues(values) {
+      const fail = (code, message) => Object.assign(new Error(message), { code });
+      if (!S.main) throw fail('no-scad', 'No OpenSCAD model is loaded.');
+      const bad = [];
+      const updates = Object.keys(values).map((name) => {
+        const p = S.params.find((q) => q.name === name && q.name !== S.partVar);
+        const v = values[name];
+        if (!p) { bad.push(name + ' (no such value)'); return null; }
+        const ok = p.type === 'number' ? typeof v === 'number' && Number.isFinite(v) : p.type === 'bool' ? typeof v === 'boolean' : typeof v === 'string';
+        if (!ok) bad.push(name + ' (expects a ' + (p.type === 'bool' ? 'boolean' : p.type) + ')');
+        return [p, v];
+      });
+      if (bad.length) throw fail('bad-values', 'Could not set ' + bad.join(', ') + '.');
+      updates.forEach(([p, v]) => { p.value = v; });
+      renderPanel();
+      const out = {};
+      S.params.forEach((p) => { if (p.name !== S.partVar) out[p.name] = p.value; });
+      return { values: out };
+    },
+    render() { return render(); },
     // embedded sample: STLs are already baked in, so show the parameters without rendering
     init(scad, manifest) {
       if (!scad || !scad.sources) return;

@@ -26,13 +26,15 @@ Usage
       --root <dir>       folder OpenSCAD can see (default: the .scad file's folder); widen it
                          when includes reach outside, e.g. include <../common/screws.scad>
       --title <text>     page title (default: manifest name)
+      --embed-origin <origin>  let a page on this origin drive the mockup from a parent frame
+                         (embedding API, repeatable), e.g. https://tracker.lan; see docs/embedding.md
 
-  mockup init [dir] [--scad <file.scad>] [--openscad]
+  mockup init [dir] [--scad <file.scad>] [--openscad] [--embed-origin <origin>]
       Create a mockup folder (default ./mockup) with a starter manifest.json and a
       viewer.html that loads it: open viewer.html?manifest=manifest.json from any web server.
       --scad fills the parts list from the file's part selector (part == "lid" ...).
 
-  mockup viewer <dir> [--openscad]
+  mockup viewer <dir> [--openscad] [--embed-origin <origin>]
       Copy the empty viewer (and OpenSCAD runtime with --openscad) into <dir>. Use it to update
       the viewer in a project after upgrading this package.
 
@@ -44,12 +46,13 @@ Usage
 `;
 
 function parseArgs(argv) {
-  const args = { _: [], lib: [], D: [] };
+  const args = { _: [], lib: [], D: [], 'embed-origin': [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-o' || a === '--out') args.out = argv[++i];
     else if (a === '-D') args.D.push(argv[++i]);
     else if (a === '--lib') args.lib.push(argv[++i]);
+    else if (a === '--embed-origin') args['embed-origin'].push(argv[++i]);
     else if (a.startsWith('--')) {
       const key = a.slice(2);
       const next = argv[i + 1];
@@ -85,9 +88,9 @@ const GUESS = [
 const guessMaterial = (n) => (GUESS.find(([re]) => re.test(n)) || [null, 'plastic-white'])[1];
 const pretty = (s) => s.replace(/[_-]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
-function copyViewer(dir, openscad) {
+function copyViewer(dir, openscad, embedOrigins) {
   fs.mkdirSync(dir, { recursive: true });
-  const html = renderPage({ data: null, addon: openscad ? 'openscad' : undefined, title: openscad ? 'OpenSCAD Mockup Viewer' : '3D Mockup Viewer' });
+  const html = renderPage({ data: null, addon: openscad ? 'openscad' : undefined, title: openscad ? 'OpenSCAD Mockup Viewer' : '3D Mockup Viewer', embedOrigins });
   fs.writeFileSync(path.join(dir, 'viewer.html'), html);
   const written = ['viewer.html'];
   if (openscad) written.push(...writeOpenscadEdition(dir));
@@ -107,6 +110,7 @@ async function main() {
     const res = await buildMockup({
       manifest, out: a.out, dropIn: !!a['drop-in'], embedScad: !!a.openscad, addon: a.openscad ? 'openscad' : undefined,
       stlDir: a['stl-dir'], render: !a['no-render'], engine: a.engine || 'wasm', libs: a.lib, title: a.title, root: a.root,
+      embedOrigins: a['embed-origin'],
       onProgress: (s) => console.log(s)
     });
     if (a.openscad) writeOpenscadEdition(path.dirname(path.resolve(a.out)));
@@ -143,7 +147,7 @@ async function main() {
       }
     }
     fs.writeFileSync(mfPath, JSON.stringify(manifest, null, 2) + '\n');
-    const written = copyViewer(dir, !!a.openscad);
+    const written = copyViewer(dir, !!a.openscad, a['embed-origin']);
     console.log(`created ${path.relative(process.cwd(), mfPath)} and ${written.length} viewer file(s) in ${path.relative(process.cwd(), dir) || '.'}`);
     const rel = path.relative(process.cwd(), dir) || '.';
     if (a.scad) console.log(`next: mockup build ${rel}/manifest.json -o ${rel}/index.html   (renders ${rel}/stl/*.stl and a single-file page)`);
@@ -153,7 +157,7 @@ async function main() {
 
   if (cmd === 'viewer') {
     const dir = path.resolve(a._[0] || '.');
-    const written = copyViewer(dir, !!a.openscad);
+    const written = copyViewer(dir, !!a.openscad, a['embed-origin']);
     console.log(`wrote ${written.length} file(s) to ${dir}`);
     return;
   }

@@ -1,6 +1,7 @@
 <title>3D Mockup Viewer</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="mockup-viewer-version" content="1.0">
+<meta name="mockup-embed-origins" content="">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -266,8 +267,26 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   try { DATA = JSON.parse($('mockup-data').textContent); } catch (e) { DATA = null; }
   const dropIn = !DATA || DATA.dropIn !== false;
 
+  // ---------- embedding: allowed parent origins ----------
+  // Off unless the page lists the origins allowed to drive it: at build time (the mockup-embed-origins meta tag)
+  // or with ?parent=origin[,origin]. A build-time list wins, so ?parent= can't widen it.
+  const PROTOCOL = 'mockup-viewer', PROTOCOL_VERSION = 1;
+  function splitOrigins(s) {
+    return String(s || '').split(/[\s,]+/).map((o) => { try { return new URL(o).origin; } catch (e) { return null; } })
+      .filter((o) => o && o !== 'null');
+  }
+  const builtOrigins = splitOrigins((document.querySelector('meta[name="mockup-embed-origins"]') || {}).content);
+  let queryOrigins = [];
+  if (!builtOrigins.length) { try { queryOrigins = splitOrigins(new URLSearchParams(location.search).get('parent')); } catch (e) { queryOrigins = []; } }
+  const embedOrigins = window.parent !== window ? (builtOrigins.length ? builtOrigins : queryOrigins) : [];
+  function postToHost(type, body) {
+    const msg = Object.assign({ protocol: PROTOCOL, version: PROTOCOL_VERSION, type }, body);
+    embedOrigins.forEach((o) => { try { window.parent.postMessage(msg, o); } catch (e) { /* host went away */ } });
+  }
+
   if (typeof THREE === 'undefined') {
     $('loading').textContent = 'The 3D library did not load. Check your connection and reload.';
+    postToHost('error', { code: 'no-3d-library', message: 'The 3D library did not load.' });
     return;
   }
 
@@ -469,7 +488,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     manifest: {}, parts: [], groups: new Map(), up: 'z', units: 'mm',
     assembledBox: new THREE.Box3(), radius: 50, maxExplode: 0,
     mode: 'assembled', explodeNow: 0, explodeTarget: 0, insideNow: 0, insideTarget: 0,
-    cutAxis: 'off', cutT: 0.5, triTotal: 0, signature: '', edits: { parts: {}, groups: {} }, arranging: false
+    cutAxis: 'off', cutT: 0.5, triTotal: 0, signature: '', edits: { parts: {}, groups: {} }, arranging: false,
+    finishList: [], builds: 0
   };
 
   function guessMaterial(name) {
@@ -494,6 +514,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   // files: {name: ArrayBuffer}; manifest may be null
   async function buildModel(manifest, files, opts) {
     opts = opts || {};
+    state.builds++;
     const keep = opts.keepView && state.parts.length ? { mode: state.mode, pos: camera.position.clone(), target: controls.target.clone(), cut: state.cutAxis } : null;
     clearModel();
     const mf = manifest || {};
@@ -536,7 +557,11 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
         });
       });
     }
-    if (!state.parts.length) { $('loading').hidden = false; $('loading').textContent = 'No parts could be loaded.'; renderPanels(); return; }
+    if (!state.parts.length) {
+      $('loading').hidden = false; $('loading').textContent = 'No parts could be loaded.'; renderPanels();
+      if (!hostBusy) setTimeout(() => postToHost('error', { code: 'no-parts', message: 'No parts could be loaded.', warnings: warnings.slice() }), 0);
+      return;
+    }
 
     // centre the assembly (model coords)
     const box = new THREE.Box3();
@@ -577,6 +602,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     buildViewButtons();
     if (keep) { camera.position.copy(keep.pos); controls.target.copy(keep.target); camT = 1; controls.update(); }
     else goView(mf.defaultView || (mf.views && mf.views.length ? viewName(mf.views[0]) : 'iso'), true);
+    // after the caller has re-added its pending warnings
+    if (embedOrigins.length) setTimeout(() => postToHost('loaded', modelSummary()), 0);
   }
 
   // ---------- grouping, explode and materials (manifest values plus local edits) ----------
@@ -648,6 +675,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function saveEdits() {
     const empty = !Object.keys(state.edits.parts).length && !Object.keys(state.edits.groups).length;
     try { if (empty) localStorage.removeItem(editsKey()); else localStorage.setItem(editsKey(), JSON.stringify(state.edits)); } catch (err) { /* storage unavailable */ }
+    hostChanged();
   }
   function editPart(id, patch) { state.edits.parts[id] = Object.assign({}, state.edits.parts[id], patch); saveEdits(); arrange(); }
   function editGroup(id, patch) { state.edits.groups[id] = Object.assign({}, state.edits.groups[id], patch); saveEdits(); arrange(); }
@@ -709,17 +737,18 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     if (instant || reduce) { state.explodeNow = state.explodeTarget; state.insideNow = state.insideTarget; }
     applyPose();
   }
-  document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => chooseMode(b.dataset.mode)));
+  function chooseMode(mode) {
     const wasExploded = state.mode === 'exploded';
-    setMode(b.dataset.mode);
-    if ((b.dataset.mode === 'exploded') !== wasExploded && camT >= 1) {
+    setMode(mode);
+    if ((mode === 'exploded') !== wasExploded && camT >= 1) {
       // pull the camera back or in so the exploded stack stays framed
       camFrom = camera.position.clone().sub(controls.target).normalize(); distFrom = camera.position.distanceTo(controls.target);
       camTo = camFrom.clone(); distTo = Math.max(distFrom * (fitDistance() / Math.max(1e-6, fitDistanceFor(wasExploded ? 1 : 0))), controls.minDistance);
       controls.target.set(0, 0, 0); camT = reduce ? 1 : 0;
       if (reduce) camera.position.copy(camTo.clone().multiplyScalar(distTo));
     }
-  }));
+  }
   function fitDistanceFor(ex) { const t = state.explodeTarget; state.explodeTarget = ex; const d = fitDistance(); state.explodeTarget = t; return d; }
 
   function applyPose() {
@@ -742,6 +771,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const box = $('finishes'); box.textContent = '';
     const list = (state.manifest.finishes && state.manifest.finishes.length) ? state.manifest.finishes
       : [{ name: 'Graphite', color: '#3a3e41' }, { name: 'Bone white', color: '#e4e1d8' }, { name: 'Slate blue', color: '#4d6b8c' }, { name: 'Signal orange', color: '#d0662b' }];
+    state.finishList = list;
     const anyFinish = state.parts.some((p) => p.matKey === 'finish');
     $('finishBox').hidden = !anyFinish;
     list.forEach((f, i) => {
@@ -749,14 +779,15 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       b.type = 'button'; b.className = 'swatch'; b.id = 'f-' + slug(f.name);
       b.style.background = f.color; b.title = f.name; b.setAttribute('aria-label', f.name);
       b.setAttribute('aria-pressed', String(finishHex === f.color.toLowerCase() || (i === 0 && !list.some((x) => x.color.toLowerCase() === finishHex))));
-      b.addEventListener('click', () => {
-        finishHex = f.color.toLowerCase();
-        state.parts.forEach((p) => { if (p.matKey === 'finish') p.mesh.material.color.copy(lin(finishHex)); });
-        box.querySelectorAll('.swatch').forEach((s) => s.setAttribute('aria-pressed', String(s === b)));
-        renderParts();
-      });
+      b.addEventListener('click', () => pickFinish(f.color));
       box.appendChild(b);
     });
+  }
+  function pickFinish(color) {
+    finishHex = color.toLowerCase();
+    state.parts.forEach((p) => { if (p.matKey === 'finish') p.mesh.material.color.copy(lin(finishHex)); });
+    $('finishes').querySelectorAll('.swatch').forEach((s, i) => s.setAttribute('aria-pressed', String(state.finishList[i].color.toLowerCase() === finishHex)));
+    renderParts();
   }
 
   // ---------- section cut ----------
@@ -952,14 +983,15 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       box.hidden = false; box.focus(); box.select();
     }
   }
-  $('arrToggle').addEventListener('click', () => {
-    state.arranging = !state.arranging;
+  $('arrToggle').addEventListener('click', () => setArranging(!state.arranging));
+  function setArranging(on) {
+    state.arranging = on;
     $('arrToggle').setAttribute('aria-pressed', String(state.arranging));
     $('arrToggle').textContent = state.arranging ? 'Done' : 'Arrange';
     $('arrNote').textContent = state.arranging ? 'Each box is a group of parts that move together. Set how far each group moves in the Exploded view, and whether it stays, turns see-through or hides in See inside. Changes apply right away and are remembered in this browser.' : '';
     $('arrJson').hidden = true;
     renderParts();
-  });
+  }
   $('arrCopy').addEventListener('click', copyManifest);
   $('arrReset').addEventListener('click', () => { state.edits = { parts: {}, groups: {} }; saveEdits(); arrange(); $('arrNote').textContent = 'Back to the original arrangement.'; });
   function highlight(p, on) {
@@ -999,8 +1031,9 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function manifestParam() {
     try { return new URLSearchParams(location.search).get('manifest') || new URLSearchParams(location.search).get('model'); } catch (e) { return null; }
   }
+  let fetchCredentials = 'same-origin';   // 'omit' while loading for a host allowed only by ?parent=
   async function fetchOk(url, as) {
-    const r = await fetch(url);
+    const r = await fetch(url, { credentials: fetchCredentials });
     if (!r.ok) throw new Error(r.status + ' for ' + url);
     return as === 'text' ? r.text() : as === 'json' ? r.json() : r.arrayBuffer();
   }
@@ -1060,22 +1093,32 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const list = Array.from(fileList || []);
     if (!list.length) return;
     $('loading').hidden = false; $('loading').textContent = 'Reading files…';
-    let manifest = null; const files = {}; const scadFiles = [];
+    let manifest = null; const files = {};
     for (const f of list) {
-      if (ext(f.name) === 'scad') { scadFiles.push(f); continue; }
       if (ext(f.name) === 'json') {
         try { manifest = JSON.parse(await f.text()); } catch (e) { warn(f.name + ' is not valid JSON.'); }
-      } else if (['stl', '3mf', 'glb'].includes(ext(f.name)) || (window.mockupScad && ['svg', 'dxf', 'png', 'dat', 'off', 'obj'].includes(ext(f.name)))) {
-        files[f.name] = await f.arrayBuffer();
-      } else {
-        warn('Skipped ' + f.name + ': only STL, 3MF, GLB and a manifest.json are supported.');
-      }
+      } else files[f.name] = await f.arrayBuffer();
     }
-    if (scadFiles.length) {
-      if (window.mockupScad) { await window.mockupScad.loadFiles(scadFiles, files, manifest); return; }
+    await loadBuffers(manifest, files);
+  }
+  // files: {name: ArrayBuffer}, part files plus any .scad sources; shared by Load files and the embedding API
+  async function loadBuffers(manifest, all) {
+    const files = {}, scad = {};
+    for (const name in all) {
+      const e = ext(name);
+      if (e === 'scad') scad[name] = new TextDecoder().decode(all[name]);
+      else if (['stl', '3mf', 'glb'].includes(e) || (window.mockupScad && ['svg', 'dxf', 'png', 'dat', 'off', 'obj'].includes(e))) files[name] = all[name];
+      else warn('Skipped ' + name + ': only STL, 3MF, GLB and a manifest.json are supported.');
+    }
+    if (Object.keys(scad).length) {
+      if (window.mockupScad) {
+        for (const k in files) scad[k] = new Uint8Array(files[k]);
+        await window.mockupScad.loadSources(scad, manifest);
+        return;
+      }
       warn('OpenSCAD files need the OpenSCAD edition of this viewer. Export STL or 3MF from OpenSCAD to view them here.');
     }
-    if (!Object.keys(files).length) { $('loading').textContent = 'No model files in that selection.'; return; }
+    if (!Object.keys(files).length) { $('loading').hidden = false; $('loading').textContent = 'No model files in that selection.'; return; }
     const pending = warnings.slice();
     await buildModel(manifest, files);
     pending.forEach(warn);
@@ -1103,6 +1146,126 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     get manifest() { return state.manifest; },
     get partCount() { return state.parts.length; }
   };
+
+  // ---------- embedding API: a host page drives the viewer in an iframe (docs/embedding.md) ----------
+  function modelSummary() {
+    const s = state.assembledBox.getSize(new THREE.Vector3());
+    const size = (state.up === 'z' ? [s.x, s.y, s.z] : [s.x, s.z, s.y]).map((v) => Math.round(v * 10) / 10);
+    return {
+      parts: state.parts.length,
+      groups: Array.from(state.groups.values()).map((g) => ({ id: g.id, label: g.label, parts: g.parts.map((p) => p.id) })),
+      size, units: state.units, warnings: warnings.slice()
+    };
+  }
+  let hostBusy = false, changeTimer = null;
+  function hostChanged() {
+    if (!embedOrigins.length) return;
+    clearTimeout(changeTimer);
+    changeTimer = setTimeout(() => postToHost('change', { manifest: currentManifest() }), 400);
+  }
+  function fail(code, message) { return Object.assign(new Error(message), { code }); }
+  function needModel() { if (!state.parts.length) throw fail('no-model', 'No model is loaded.'); }
+  function oneOf(name, value, allowed) {
+    if (!allowed.includes(value)) throw fail('bad-value', name + ' must be one of ' + allowed.join(', ') + '; got ' + JSON.stringify(value) + '.');
+  }
+  function hostUrl(v, base) {
+    const u = new URL(v, base);
+    if (!/^https?:$/.test(u.protocol)) throw fail('bad-value', 'Only http and https URLs can be loaded; got ' + u.protocol);
+    return u;
+  }
+  function toBuffer(name, v) {
+    if (v instanceof ArrayBuffer) return v;
+    if (ArrayBuffer.isView(v)) return v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength);
+    throw fail('bad-value', 'files["' + name + '"] must be an ArrayBuffer, a typed array or a URL.');
+  }
+  async function hostLoad(m) {
+    const before = state.builds;
+    let base = location.href, mf = m.manifest || null;
+    if (m.base) base = hostUrl(m.base, location.href).href;
+    if (typeof mf === 'string' && !m.files) await loadFromUrl(hostUrl(mf, base).href);
+    else {
+      if (typeof mf === 'string') { const u = hostUrl(mf, base); mf = await fetchOk(u, 'json'); base = u.href; }
+      if (mf !== null && (typeof mf !== 'object' || Array.isArray(mf))) throw fail('bad-value', 'manifest must be an object or a URL.');
+      const files = {};
+      await Promise.all(Object.entries(m.files || {}).map(async ([name, v]) => {
+        files[name] = typeof v === 'string' ? await fetchOk(hostUrl(v, base)) : toBuffer(name, v);
+      }));
+      if (!Object.keys(files).length) throw fail('bad-value', 'load needs a manifest URL, or files.');
+      await loadBuffers(mf, files);
+    }
+    if (state.builds === before || !state.parts.length) throw Object.assign(fail('no-parts', 'No parts could be loaded. ' + warnings.join(' ')), { warnings: warnings.slice() });
+    return modelSummary();
+  }
+  function scadAddon() {
+    if (!window.mockupScad || !window.mockupScad.setValues) throw fail('unsupported', 'This is not the OpenSCAD edition of the viewer.');
+    return window.mockupScad;
+  }
+  const HOST_COMMANDS = {
+    load: hostLoad,
+    setMode(m) { needModel(); oneOf('mode', m.mode, ['assembled', 'exploded', 'inside']); chooseMode(m.mode); return { mode: m.mode }; },
+    setView(m) {
+      needModel();
+      const names = Array.from(document.querySelectorAll('#viewSeg [data-view]')).map((b) => b.dataset.view);
+      oneOf('view', m.view, names); goView(m.view); return { view: m.view };
+    },
+    setFinish(m) {
+      needModel();
+      const want = String(m.finish || '').toLowerCase();
+      const f = state.finishList.find((x) => x.name.toLowerCase() === want || x.color.toLowerCase() === want);
+      if (!f && !/^#[0-9a-f]{6}$/.test(want)) throw fail('bad-value', 'finish must be a finish name (' + state.finishList.map((x) => x.name).join(', ') + ') or a #rrggbb colour.');
+      pickFinish(f ? f.color : want); return { finish: f ? f.name : want };
+    },
+    setCut(m) {
+      needModel(); oneOf('axis', m.axis, ['off', 'x', 'y', 'z']);
+      if (m.position !== undefined) {
+        if (typeof m.position !== 'number' || !(m.position >= 0 && m.position <= 1)) throw fail('bad-value', 'position must be a number from 0 to 1.');
+        state.cutT = m.position; $('cutPos').value = String(Math.round(m.position * 1000));
+      }
+      setCut(m.axis); return { axis: m.axis, position: state.cutT };
+    },
+    setArrange(m) { setArranging(!!m.on); return { on: state.arranging }; },
+    getManifest() { return { manifest: currentManifest() }; },
+    'scad.setValues'(m) {
+      const addon = scadAddon();
+      if (!m.values || typeof m.values !== 'object') throw fail('bad-value', 'values must be an object of name: value.');
+      return addon.setValues(m.values);
+    },
+    async 'scad.render'() {
+      const addon = scadAddon();
+      const before = state.builds;
+      await addon.render();
+      if (state.builds === before || !state.parts.length) throw fail('render-failed', 'OpenSCAD produced no geometry. ' + warnings.join(' '));
+      return modelSummary();
+    }
+  };
+  async function runHostCommand(m) {
+    const reply = (body) => { if (m.id !== undefined) postToHost('reply', Object.assign({ id: m.id }, body)); };
+    if (m.version !== PROTOCOL_VERSION) { reply({ ok: false, error: { code: 'version', message: 'This viewer speaks protocol version ' + PROTOCOL_VERSION + '; got ' + m.version + '.' } }); return; }
+    const fn = Object.prototype.hasOwnProperty.call(HOST_COMMANDS, m.type) ? HOST_COMMANDS[m.type] : null;
+    if (!fn) { reply({ ok: false, error: { code: 'unknown-type', message: 'Unknown message type "' + m.type + '".' } }); return; }
+    hostBusy = true;
+    if (!builtOrigins.length) fetchCredentials = 'omit';
+    try { reply({ ok: true, result: await fn(m) }); }
+    catch (e) { reply({ ok: false, error: { code: e.code || 'failed', message: String(e && e.message ? e.message : e), warnings: e.warnings } }); }
+    finally { hostBusy = false; fetchCredentials = 'same-origin'; }
+  }
+  // commands run one at a time, in order, after the page's own model has loaded
+  let hostQueue = null;
+  function startEmbedding(initialLoad) {
+    if (!embedOrigins.length) return;
+    $('arrBox').hidden = false;
+    hostQueue = initialLoad.then(() => postToHost('ready', {
+      edition: window.mockupScad ? 'openscad' : 'standard',
+      viewerVersion: (document.querySelector('meta[name="mockup-viewer-version"]') || {}).content || null,
+      model: state.parts.length ? modelSummary() : null
+    }));
+    window.addEventListener('message', (e) => {
+      if (e.source !== window.parent || !embedOrigins.includes(e.origin)) return;
+      const m = e.data;
+      if (!m || typeof m !== 'object' || m.protocol !== PROTOCOL || m.type === 'reply') return;
+      hostQueue = hostQueue.then(() => runHostCommand(m));
+    });
+  }
 
   // ---------- render loop ----------
   function resize() {
@@ -1145,6 +1308,10 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   if (mq.addEventListener) mq.addEventListener('change', retint);
   new MutationObserver(retint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-  loadEmbedded().catch((e) => { $('loading').hidden = false; $('loading').textContent = 'Could not load the model: ' + (e && e.message ? e.message : e); });
+  startEmbedding(loadEmbedded().catch((e) => {
+    const message = 'Could not load the model: ' + (e && e.message ? e.message : e);
+    $('loading').hidden = false; $('loading').textContent = message;
+    postToHost('error', { code: 'load-failed', message });
+  }));
 })();
 </script>
