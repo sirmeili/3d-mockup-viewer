@@ -1,6 +1,7 @@
 # Progress
 
 ## Done
+- 2026-10-24: Planned item 5, simple inline embed (branch `feat/inline-embed`, awaiting review/merge): compact mode (`?embed` with `controls`, `mode`, `view`, `finish`, `theme`), the `snapshot` command, `<mockup-embed>` (lazy start near the viewport, stills, at most 8 live, `load="click"`, `link`, errors in the frame), classic `dist/embed.js` plus `dist/embed.mjs`.
 - 2026-10-24: Manifest editor, planned items 4 and 2 (PR #3, merged). Phase 1: shared edits, undo history, dialog with live preview and change list. Phase 2: Page (with up axis), Parts, Groups, Views, Finishes, Spec sheet. Phase 3: reordering by drag (mouse, touch, pen), arrow keys and buttons. Phase 4: Raw JSON with checks and Apply; Edit manifest moved to the header beside Load files.
 - 2026-10-24: Embedding API, TODO item 1. Merged into main (PR #1).
   - Viewer listens to a parent frame only when its origin is allowed: `?parent=` or a build-time list (`--embed-origin`, `renderPage({ embedOrigins })`). Off by default, so the Claude artifacts are unaffected.
@@ -9,12 +10,12 @@
   - Browser tests: test host on a second local server; URL load, bytes load, controls, Arrange edit → `change`, origin rejection, OpenSCAD values + render.
 
 ## In progress
-- 2026-10-24: Planned item 5, simple inline embed (branch `feat/inline-embed`). Phase 1 done: compact mode (`?embed`, `controls`, `mode`, `view`, `finish`, `theme`) and the `snapshot` command. Phase 2 next: the `<mockup-embed>` element.
+- Nothing.
 
 ## Next
 - Tracker side (in `ai-project-tracker`, its own backlog): where mockups live and how an item shows one. It has no mockup or file storage yet.
 - Decide the spec's open questions (docs/SPEC.md section 13).
-- Planned work in docs/SPEC.md section 12, in order (items 1, 3, 5 and 6 remain; numbers are kept stable).
+- Planned work in docs/SPEC.md section 12, in order (items 1, 3 and 6 remain; numbers are kept stable).
 
 ## Decisions
 | Date | Decision | Why |

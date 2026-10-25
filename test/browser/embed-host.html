@@ -7,7 +7,7 @@
 <style>body { margin: 0; padding: 16px; font: 14px system-ui, sans-serif; }</style>
 <div id="box"></div>
 <script type="module">
-  import { embedViewer } from './embed.js';
+  import { embedViewer } from './embed.mjs';
   const q = new URLSearchParams(location.search);
   window.events = [];
   const viewer = embedViewer(document.getElementById('box'), {
