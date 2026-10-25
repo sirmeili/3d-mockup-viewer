@@ -71,7 +71,7 @@ URL strings are resolved against the host page before they are sent, so `load('m
 |---|---|---|
 | `ready` | `{ edition: 'standard' \| 'openscad', viewerVersion, model }` | Once the page has started and loaded its own model, if it has one (`model` is then a summary, else `null`). |
 | `loaded` | Model summary | After every model build: host `load`, the user's Load files or drag-and-drop, an OpenSCAD render. |
-| `change` | `{ manifest }` | About 400 ms after the last Arrange edit (names, groups, explode offsets, see-inside, materials, Reset). |
+| `change` | `{ manifest }` | About 400 ms after the last edit in Arrange or the manifest editor (names, groups, explode offsets, see-inside, materials, page text, Reset, Undo and Redo). |
 | `error` | `{ code, message, warnings? }` | Failures not caused by a host command, such as the page's own model failing to load. Command failures reject the command's promise instead. |
 
 ### Model summary

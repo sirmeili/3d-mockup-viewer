@@ -1,6 +1,7 @@
 # Progress
 
 ## Done
+- 2026-10-24: Manifest editor, planned items 4 and 2 (branch `feat/manifest-editor`, awaiting review/merge). Phase 1: shared edits, undo history, dialog with live preview and change list. Phase 2: Page (with up axis), Parts, Groups, Views, Finishes, Spec sheet. Phase 3: reordering by drag (mouse, touch, pen), arrow keys and buttons. Phase 4: Raw JSON with checks and Apply; Edit manifest moved to the header beside Load files.
 - 2026-10-24: Embedding API, TODO item 1. Merged into main (PR #1).
   - Viewer listens to a parent frame only when its origin is allowed: `?parent=` or a build-time list (`--embed-origin`, `renderPage({ embedOrigins })`). Off by default, so the Claude artifacts are unaffected.
   - Commands: `load` (manifest URL, or manifest object/URL plus files as ArrayBuffers or URLs), `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `scad.setValues`, `scad.render`. Events: `ready`, `loaded`, `change`, `error`. Protocol version 1.
@@ -8,12 +9,12 @@
   - Browser tests: test host on a second local server; URL load, bytes load, controls, Arrange edit → `change`, origin rejection, OpenSCAD values + render.
 
 ## In progress
-- 2026-10-24: `docs/SPEC.md`, the project specification (branch `docs/spec`, awaiting review/merge). TODO.md moved into its "Planned work" section and deleted; CLAUDE.md, README and embedding.md point to it.
+- Nothing.
 
 ## Next
 - Tracker side (in `ai-project-tracker`, its own backlog): where mockups live and how an item shows one. It has no mockup or file storage yet.
 - Decide the spec's open questions (docs/SPEC.md section 13).
-- Planned work in docs/SPEC.md section 12, in order.
+- Planned work in docs/SPEC.md section 12, in order (items 1, 3 and 5 remain; numbers are kept stable).
 
 ## Decisions
 | Date | Decision | Why |
@@ -25,6 +26,10 @@
 | 2026-10-24 | Embed browser tests use a second real local server, not a Playwright-routed origin. | Chromium's local network access checks block a routed "public" origin from framing localhost. |
 | 2026-10-24 | `docs/SPEC.md` is the project's source of truth; TODO.md folded into it and deleted. | Owner's request: one detailed spec drives the design. |
 | 2026-10-24 | Save (planned item 3) writes to a local file (file picker, download, else Copy); no `mockup serve --writable`, no artifact storage. The viewer never talks to a server beyond reading static files. | Owner: the program must run in the browser without server-side communication. |
+| 2026-10-24 | Manifest editor: live preview reuses the main canvas (moved into the dialog; none on phones); part ids read-only; no Add part from file; Copy only until Save exists. | Owner's choices; one WebGL context. |
+| 2026-10-24 | Edit manifest moved to the header beside Load files. | Owner: better suited there. |
+| 2026-10-24 | Planned items keep their numbers when done ones are removed. | The owner, the design canvas and open questions refer to items by number. |
+| 2026-10-24 | Every commit updates docs/SPEC.md with its changes. | Owner's rule: the spec is always current. |
 | 2026-10-24 | `<mockup-viewer>` custom element (optional in item 1) not built; noted under the inline-embed item. | Overlaps `<mockup-embed>`; better designed together. |
 
 ## Open questions

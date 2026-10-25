@@ -172,6 +172,112 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 .sheet p { margin: 0; max-width: 62ch; }
 .foot { font-size: 12.5px; color: var(--muted); margin: 0; }
 .foot code { font-family: var(--font-mono); font-size: 12px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn.icon { padding: 7px; }
+.btn.small { padding: 5px 9px; font-size: 12.5px; }
+
+/* Manifest editor: a modal dialog with the section list, the section being edited, and the live preview with the change list.
+   On phones it fills the screen, the section list becomes tabs and the preview is left out. */
+.ed {
+  width: min(1200px, calc(100vw - 32px)); max-width: none; height: min(880px, calc(100vh - 32px)); max-height: none;
+  padding: 0; border: 0; border-radius: 14px; background: var(--surface); color: var(--fg);
+  box-shadow: 0 24px 60px color-mix(in srgb, var(--edge) 35%, transparent);
+}
+.ed[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.ed::backdrop { background: color-mix(in srgb, var(--edge) 50%, transparent); }
+.ed-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.ed-head h2 { font: 700 20px/1.2 var(--font-display); margin: 0; }
+.ed-sub { font: 12.5px var(--font-mono); color: var(--muted); margin: 2px 0 0; overflow-wrap: anywhere; }
+.ed-body { display: grid; grid-template-columns: 200px minmax(0, 1fr) 300px; min-height: 0; }
+.ed-nav { border-right: 1px solid var(--line); padding: 12px 10px; display: grid; align-content: start; gap: 2px; background: var(--bg); overflow: auto; }
+.ed-nav button {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; font: 14px var(--font-body); color: var(--fg);
+  background: transparent; border: 0; border-radius: 8px; padding: 9px 12px; text-align: left; cursor: pointer;
+}
+.ed-nav button:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ed-nav button[aria-current="true"] { background: color-mix(in srgb, var(--accent) 16%, transparent); font-weight: 600; }
+.ed-nav .count { font: 11.5px var(--font-mono); color: var(--muted); }
+.ed-main { padding: 18px 22px; overflow: auto; display: grid; align-content: start; gap: 16px; min-width: 0; }
+.ed-main h3 { font: 600 18px var(--font-display); margin: 0; }
+.ed-help {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; max-width: 72ch; font-size: 14px;
+}
+.ed-help p { margin: 0; }
+.ed-help b { font-weight: 600; }
+.ed-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 16px; }
+.ed-fields .wide { grid-column: 1 / -1; }
+.ed .fld:focus-within { outline: none; }
+.ed textarea { font: 13.5px/1.45 var(--font-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; width: 100%; box-sizing: border-box; min-height: 90px; resize: vertical; }
+.ed input[type="number"] { font: 13px var(--font-mono); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 7px; width: 72px; }
+.ed input[readonly] { color: var(--muted); }
+.ed-list { display: grid; gap: 8px; }
+.ed-list > .fl { display: flex; justify-content: space-between; gap: 8px; }
+.ed-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; display: grid; gap: 10px; min-width: 0; }
+.ed-card.open { border-color: var(--accent); }
+.ed-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-width: 0; }
+.ed-row > .grow { flex: 1 1 160px; min-width: 0; }
+.ed-row .meta { font-size: 13px; color: var(--muted); }
+.ed-row .meta.mono { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.ed-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 6px; align-items: center; }
+.ed-one { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.ed-err { color: var(--warn); font-size: 12.5px; margin: 0; }
+.ed-err:empty { display: none; }
+.ed-swatch { width: 40px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); flex: none; }
+.ed-badge { font: 11px var(--font-mono); letter-spacing: .04em; color: var(--accent); }
+.ed .add { justify-self: start; border-style: dashed; }
+/* reordering: a grip to drag (mouse, touch, pen; arrow keys when focused), a line where the item will land */
+.ed-handle {
+  display: inline-grid; place-items: center; width: 28px; height: 30px; padding: 0; flex: none;
+  color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 6px; cursor: grab; touch-action: none;
+}
+.ed-handle:hover { color: var(--fg); border-color: var(--line); }
+.ed-handle svg { width: 14px; height: 14px; fill: currentColor; }
+.ed .dragging { opacity: .45; }
+.ed-drop { height: 3px; border-radius: 2px; background: var(--accent); }
+/* Raw JSON: the manifest as text, with checks that explain problems by line */
+.ed-nav .ed-sep { height: 1px; background: var(--line); margin: 8px 4px; }
+.ed .ed-json { font: 12.5px/1.5 var(--font-mono); min-height: 360px; white-space: pre; overflow: auto; tab-size: 2; }
+.ed-checks { display: grid; gap: 8px; }
+.ed-checks ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+.ed-checks li { display: flex; gap: 8px; align-items: baseline; }
+.ed-checks .mark { font: 12px var(--font-mono); flex: none; width: 1.2em; }
+.ed-checks .ok .mark { color: var(--accent); }
+.ed-checks .bad, .ed-problem { color: var(--warn); }
+.ed-checks .skip { color: var(--muted); }
+.ed-problem { border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); border-radius: 8px; padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13.5px; }
+.ed-problem span { flex: 1 1 220px; color: var(--fg); }
+.ed-problem b { color: var(--warn); font-weight: 600; }
+.ed-pair { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr) auto; }
+.ed-one { grid-template-columns: auto minmax(0, 1fr) auto; }
+.ed input[type="text"], .ed select {
+  font: 13.5px/1.3 var(--font-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px 8px; width: 100%; box-sizing: border-box; min-width: 0;
+}
+.ed-aside { border-left: 1px solid var(--line); padding: 16px; display: grid; align-content: start; gap: 12px; background: var(--bg); overflow: auto; }
+.ed-aside .stage { aspect-ratio: 4 / 3; min-height: 0; max-height: none; }
+.ed-aside .stage .hint { display: none; }
+.ed-changes { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 6px; }
+.ed-changes .phead { margin: 0; }
+.ed-changes ul { margin: 0; padding-left: 16px; font-size: 13px; display: grid; gap: 3px; overflow-wrap: anywhere; }
+.ed-changes ul:empty { display: none; }
+.ed-changes p { margin: 0; font-size: 13px; color: var(--muted); }
+.ed-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--bg); }
+.ed-foot > div { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ed-foot .note { font-size: 13px; color: var(--muted); margin: 0; }
+.ed-copy-note { flex-basis: 100%; }
+.ed-copy-note:empty { display: none; }
+.ed-foot .arr-json { margin: 0; min-height: 120px; }
+@media (max-width: 760px) {
+  .ed { width: 100%; height: 100%; inset: 0; margin: 0; border-radius: 0; }
+  .ed-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .ed-nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 6px 8px; }
+  .ed-nav button { flex: none; }
+  .ed-nav .count { display: none; }
+  .ed-aside { display: none; }
+  .ed-head, .ed-main, .ed-foot { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+}
 </style>
 
 <div class="wrap">
@@ -181,12 +287,20 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       <h1 id="title">Loading model</h1>
       <p class="sub" id="subtitle" hidden></p>
     </div>
-    <div class="group" id="openBox" hidden>
-      <button class="btn" id="openBtn" type="button">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/></svg>
-        Load files
-      </button>
-      <input type="file" id="fileInput" multiple accept=".stl,.3mf,.glb,.json" hidden>
+    <div class="group">
+      <div class="group" id="openBox" hidden>
+        <button class="btn" id="openBtn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/></svg>
+          Load files
+        </button>
+        <input type="file" id="fileInput" multiple accept=".stl,.3mf,.glb,.json" hidden>
+      </div>
+      <div class="group" id="edBox" hidden>
+        <button class="btn" type="button" id="edOpen" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/></svg>
+          Edit manifest
+        </button>
+      </div>
     </div>
   </header>
 
@@ -244,6 +358,45 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   </div>
   <p class="foot" id="foot">Units are millimetres unless the model says otherwise. Front faces −Y in Z-up models, the OpenSCAD convention.</p>
 </div>
+
+<dialog class="ed" id="editor" aria-labelledby="edTitle">
+  <div class="ed-head">
+    <div>
+      <h2 id="edTitle">Manifest editor</h2>
+      <p class="ed-sub" id="edSub"></p>
+    </div>
+    <button class="btn icon" type="button" id="edClose" aria-label="Close editor">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="ed-body">
+    <nav class="ed-nav" id="edNav" aria-label="Manifest sections"></nav>
+    <div class="ed-main" id="edMain"></div>
+    <aside class="ed-aside" id="edAside" aria-label="Preview and changes">
+      <span class="fl">Live preview</span>
+      <div id="edPreview"></div>
+      <div class="ed-changes">
+        <div class="phead"><span class="fl" id="edChangesTitle">Changes</span><button class="btn small" type="button" id="edResetAll" hidden>Reset all</button></div>
+        <ul id="edChanges"></ul>
+        <p id="edNoChanges">No changes from the loaded manifest.</p>
+      </div>
+    </aside>
+  </div>
+  <div class="ed-foot">
+    <div>
+      <button class="btn" type="button" id="edUndo" disabled>Undo</button>
+      <button class="btn" type="button" id="edRedo" disabled>Redo</button>
+      <span class="note" id="edCount" role="status"></span>
+    </div>
+    <div>
+      <button class="btn" type="button" id="edResetSection">Reset section</button>
+      <button class="btn" type="button" id="edCopy">Copy manifest</button>
+      <button class="btn primary" type="button" id="edDone">Done</button>
+    </div>
+    <p class="note ed-copy-note" id="edNote" role="status"></p>
+    <textarea id="edJson" class="arr-json" readonly hidden aria-label="Manifest JSON"></textarea>
+  </div>
+</dialog>
 
 <!-- EDITION-SLOT -->
 <!-- MOCKUP-DATA: the build script replaces the contents of this tag. Shape: {"manifest":{…},"files":{"name.stl":"<base64>"},"dropIn":true|false} -->
@@ -521,10 +674,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     state.manifest = mf;
     const fileNames = Object.keys(files);
     const hasGLB = fileNames.some((f) => ext(f) === 'glb');
-    state.up = mf.up || (hasGLB && !fileNames.some((f) => /\.(stl|3mf)$/i.test(f)) ? 'y' : 'z');
-    state.units = mf.units || 'mm';
-    root.rotation.set(state.up === 'z' ? -Math.PI / 2 : 0, 0, 0);
-    if (mf.finishes && mf.finishes.length) finishHex = mf.finishes[0].color.toLowerCase();
+    state.baseUp = mf.up || (hasGLB && !fileNames.some((f) => /\.(stl|3mf)$/i.test(f)) ? 'y' : 'z');
+    state.up = state.baseUp;
 
     const used = new Set();
     const specs = []; // {id,name,group,material,file}
@@ -582,13 +733,13 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
     state.signature = state.parts.map((p) => p.id).sort().join('|');
     state.edits = loadEdits();
+    if (edHistory.key !== editsKey()) { resetHistory(); edJson.draft = null; }
+    applyUpAxis();
+    if (state.edits.lists.finishes || (mf.finishes && mf.finishes.length)) setFinishColor(finishes()[0].color);
     arrange();
     state.radius = box.getBoundingSphere(new THREE.Sphere()).radius;
 
-    // dims tag
-    const dims = state.up === 'z' ? [size.x, size.y, size.z] : [size.x, size.z, size.y];
-    const fmt = (v) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
-    $('dims').textContent = dims.map(fmt).join(' × ') + ' ' + state.units;
+    updateDims();
     $('dims').hidden = false;
     $('loading').hidden = true;
 
@@ -601,17 +752,24 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     renderPanels();
     buildViewButtons();
     if (keep) { camera.position.copy(keep.pos); controls.target.copy(keep.target); camT = 1; controls.update(); }
-    else goView(mf.defaultView || (mf.views && mf.views.length ? viewName(mf.views[0]) : 'iso'), true);
+    else goView(defaultView(), true);
     // after the caller has re-added its pending warnings
     if (embedOrigins.length) setTimeout(() => postToHost('loaded', modelSummary()), 0);
   }
 
   // ---------- grouping, explode and materials (manifest values plus local edits) ----------
+  // Parts in their edited order (lists.partOrder); parts it doesn't name keep their loaded order, after it.
+  // Groups are ordered by their first part, so the part order sets the group order too.
+  function orderedParts() {
+    const order = state.edits.lists.partOrder || [];
+    const rank = (p, i) => { const k = order.indexOf(p.id); return k < 0 ? order.length + i : k; };
+    return state.parts.map((p, i) => [rank(p, i), p]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+  }
   function arrange() {
     const mf = state.manifest, ed = state.edits;
     state.groups.forEach((g) => assembly.remove(g.obj));
     state.groups = new Map();
-    state.parts.forEach((p) => {
+    orderedParts().forEach((p) => {
       const pe = ed.parts[p.id] || {};
       p.name = pe.name || p.baseName;
       const mk = pe.material || p.baseMat;
@@ -665,20 +823,81 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     renderParts();
   }
 
-  // local edits, remembered per set of parts in this browser
+  // Local edits on top of the loaded manifest, shared by Arrange and the manifest editor and remembered
+  // per set of parts in this browser: {parts: {id: patch}, groups: {id: patch}, page: {field: value},
+  // lists: {views|finishes|spec: the whole edited list}}
+  const EDIT_KEYS = ['parts', 'groups', 'page', 'lists'];
   function editsKey() { return 'mockupEdits:' + (state.manifest.name || '') + ':' + state.signature; }
+  function normEdits(e) {
+    const out = {};
+    EDIT_KEYS.forEach((k) => { out[k] = e && e[k] && typeof e[k] === 'object' && !Array.isArray(e[k]) ? e[k] : {}; });
+    return out;
+  }
   function loadEdits() {
     let e = null;
     try { e = JSON.parse(localStorage.getItem(editsKey()) || 'null'); } catch (err) { e = null; }
-    return e && e.parts && e.groups ? e : { parts: {}, groups: {} };
+    return normEdits(e);
   }
+  function editsEmpty(e) { return EDIT_KEYS.every((k) => !Object.keys(e[k]).length); }
   function saveEdits() {
-    const empty = !Object.keys(state.edits.parts).length && !Object.keys(state.edits.groups).length;
-    try { if (empty) localStorage.removeItem(editsKey()); else localStorage.setItem(editsKey(), JSON.stringify(state.edits)); } catch (err) { /* storage unavailable */ }
+    try { if (editsEmpty(state.edits)) localStorage.removeItem(editsKey()); else localStorage.setItem(editsKey(), JSON.stringify(state.edits)); } catch (err) { /* storage unavailable */ }
     hostChanged();
+    edChanged();
   }
-  function editPart(id, patch) { state.edits.parts[id] = Object.assign({}, state.edits.parts[id], patch); saveEdits(); arrange(); }
-  function editGroup(id, patch) { state.edits.groups[id] = Object.assign({}, state.edits.groups[id], patch); saveEdits(); arrange(); }
+
+  // Undo history: snapshots of the edits. Steps with the same key close together (typing in one field) count as one.
+  const edHistory = { key: null, undo: [], redo: [], lastStep: null, lastAt: 0 };
+  function resetHistory() { edHistory.key = editsKey(); edHistory.undo = []; edHistory.redo = []; edHistory.lastStep = null; }
+  function recordEdit(step, before) {
+    const now = Date.now();
+    if (step && step === edHistory.lastStep && now - edHistory.lastAt < 1500) { edHistory.lastAt = now; return; }
+    edHistory.undo.push(before || JSON.stringify(state.edits));
+    if (edHistory.undo.length > 200) edHistory.undo.shift();
+    edHistory.redo = []; edHistory.lastStep = step || null; edHistory.lastAt = now;
+  }
+  // every edit goes through here: change, record, remember, redraw; an edit that changes nothing is dropped
+  function applyEdit(step, fn) {
+    const before = JSON.stringify(state.edits);
+    fn(state.edits);
+    if (JSON.stringify(state.edits) === before) return;
+    recordEdit(step, before); saveEdits(); refreshFromEdits();
+  }
+  function restoreEdits(json) { state.edits = normEdits(JSON.parse(json)); edHistory.lastStep = null; saveEdits(); refreshFromEdits(); }
+  function undo() { if (!edHistory.undo.length) return; edHistory.redo.push(JSON.stringify(state.edits)); restoreEdits(edHistory.undo.pop()); edRender(); }
+  function redo() { if (!edHistory.redo.length) return; edHistory.undo.push(JSON.stringify(state.edits)); restoreEdits(edHistory.redo.pop()); edRender(); }
+  function refreshFromEdits() {
+    const turned = applyUpAxis();
+    arrange(); renderHeader(); updateDims(); buildViewButtons(); buildFinishes(); renderSheet(); updateCut();
+    if (turned) goView(views().some((v) => viewName(v) === current) ? current : viewName(views()[0]), true);
+  }
+  function editPart(id, patch) { applyEdit(null, (ed) => { ed.parts[id] = Object.assign({}, ed.parts[id], patch); }); }
+  function editGroup(id, patch) { applyEdit(null, (ed) => { ed.groups[id] = Object.assign({}, ed.groups[id], patch); }); }
+
+  // page fields and lists with edits applied
+  function pageInfo() { return Object.assign({}, state.manifest, state.edits.page); }
+  const DEFAULT_VIEWS = ['front', 'rear', 'left', 'top', 'iso'];
+  const DEFAULT_FINISHES = [{ name: 'Graphite', color: '#3a3e41' }, { name: 'Bone white', color: '#e4e1d8' }, { name: 'Slate blue', color: '#4d6b8c' }, { name: 'Signal orange', color: '#d0662b' }];
+  function baseViews() { return state.manifest.views && state.manifest.views.length ? state.manifest.views : DEFAULT_VIEWS; }
+  function views() { const l = state.edits.lists.views; return l && l.length ? l : baseViews(); }
+  function baseFinishes() { return state.manifest.finishes && state.manifest.finishes.length ? state.manifest.finishes : DEFAULT_FINISHES; }
+  function finishes() { const l = state.edits.lists.finishes; return l && l.length ? l : baseFinishes(); }
+  function specSections() { return state.edits.lists.spec || state.manifest.spec || []; }
+  // returns true when the up axis changed
+  function applyUpAxis() {
+    const up = state.edits.page.up || state.baseUp;
+    const turned = up !== state.up;
+    state.up = up;
+    root.rotation.set(up === 'z' ? -Math.PI / 2 : 0, 0, 0);
+    root.updateMatrixWorld(true);
+    return turned;
+  }
+  function units() { return pageInfo().units || 'mm'; }
+  function updateDims() {
+    const s = state.assembledBox.getSize(new THREE.Vector3());
+    const dims = state.up === 'z' ? [s.x, s.y, s.z] : [s.x, s.z, s.y];
+    const fmt = (v) => (v >= 10 ? v.toFixed(0) : v.toFixed(1));
+    $('dims').textContent = dims.map(fmt).join(' × ') + ' ' + units();
+  }
 
   // ---------- views ----------
   const STOCK_VIEWS = { // world coords: +Y up, +Z toward the viewer's front
@@ -687,7 +906,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   };
   function viewName(v) { return typeof v === 'string' ? v : slug(v.name); }
   function viewDir(name) {
-    const mv = (state.manifest.views || []).find((v) => typeof v === 'object' && slug(v.name) === name);
+    const mv = views().find((v) => typeof v === 'object' && slug(v.name) === name);
     if (mv && Array.isArray(mv.dir)) {
       const d = new THREE.Vector3().fromArray(mv.dir);
       if (state.up === 'z') d.set(d.x, d.z, -d.y);
@@ -695,16 +914,17 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     }
     return new THREE.Vector3().fromArray(STOCK_VIEWS[name] || STOCK_VIEWS.iso).normalize();
   }
+  function viewLabel(v) { return typeof v === 'string' ? (v === 'iso' ? '3/4' : v[0].toUpperCase() + v.slice(1)) : v.name; }
   let current = 'iso';
   function buildViewButtons() {
-    const list = state.manifest.views && state.manifest.views.length ? state.manifest.views : ['front', 'rear', 'left', 'top', 'iso'];
+    const list = views();
     const seg = $('viewSeg'); seg.textContent = '';
     list.forEach((v) => {
       const n = viewName(v);
       if (typeof v === 'string' && !STOCK_VIEWS[n]) return;
       const b = document.createElement('button');
       b.type = 'button'; b.id = 'v-' + n; b.dataset.view = n;
-      b.textContent = typeof v === 'string' ? (n === 'iso' ? '3/4' : n[0].toUpperCase() + n.slice(1)) : v.name;
+      b.textContent = viewLabel(v);
       b.setAttribute('aria-pressed', String(n === current));
       b.addEventListener('click', () => goView(n));
       seg.appendChild(b);
@@ -769,8 +989,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   // ---------- finishes ----------
   function buildFinishes() {
     const box = $('finishes'); box.textContent = '';
-    const list = (state.manifest.finishes && state.manifest.finishes.length) ? state.manifest.finishes
-      : [{ name: 'Graphite', color: '#3a3e41' }, { name: 'Bone white', color: '#e4e1d8' }, { name: 'Slate blue', color: '#4d6b8c' }, { name: 'Signal orange', color: '#d0662b' }];
+    const list = finishes();
     state.finishList = list;
     const anyFinish = state.parts.some((p) => p.matKey === 'finish');
     $('finishBox').hidden = !anyFinish;
@@ -783,9 +1002,12 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       box.appendChild(b);
     });
   }
-  function pickFinish(color) {
+  function setFinishColor(color) {
     finishHex = color.toLowerCase();
     state.parts.forEach((p) => { if (p.matKey === 'finish') p.mesh.material.color.copy(lin(finishHex)); });
+  }
+  function pickFinish(color) {
+    setFinishColor(color);
     $('finishes').querySelectorAll('.swatch').forEach((s, i) => s.setAttribute('aria-pressed', String(state.finishList[i].color.toLowerCase() === finishHex)));
     renderParts();
   }
@@ -877,6 +1099,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
           ax.append(el('span', axis.toUpperCase()));
           axes.append(ax);
           ax.append(numInput('g-ex-' + axis + '-' + g.id, g.explode.getComponent(ai), (v) => {
+            recordEdit('explode:' + g.id + ':' + axis);
             g.explode.setComponent(ai, v); g.autoExplode = false;
             state.edits.groups[g.id] = Object.assign({}, state.edits.groups[g.id], { explode: g.explode.toArray().map((n) => Math.round(n * 10) / 10) });
             saveEdits();
@@ -919,8 +1142,10 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
             if (gs.value === '__new') {
               let n = 1; while (state.groups.has('group-' + n)) n++;
               const gid = 'group-' + n;
-              state.edits.groups[gid] = Object.assign({}, state.edits.groups[gid], { label: 'Group ' + n });
-              editPart(p.id, { group: gid });
+              applyEdit(null, (ed) => {
+                ed.groups[gid] = Object.assign({}, ed.groups[gid], { label: 'Group ' + n });
+                ed.parts[p.id] = Object.assign({}, ed.parts[p.id], { group: gid });
+              });
             } else editPart(p.id, { group: gs.value });
           });
           const ms = document.createElement('select'); ms.id = 'p-mat-' + p.id; ms.setAttribute('aria-label', 'Material for ' + p.name);
@@ -954,12 +1179,22 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function currentManifest() {
     const mf = state.manifest;
     const out = JSON.parse(JSON.stringify(mf || {}));
+    Object.assign(out, JSON.parse(JSON.stringify(state.edits.page)));
+    if (out.defaultView === '') delete out.defaultView; // cleared by Raw JSON: open on the first view
+    ['views', 'finishes', 'spec'].forEach((k) => { if (state.edits.lists[k]) out[k] = JSON.parse(JSON.stringify(state.edits.lists[k])); });
     const baseParts = {}; (mf.parts || []).forEach((p) => { baseParts[p.id] = p; });
     out.up = state.up;
-    out.parts = state.parts.map((p) => {
+    // parts listed group by group, in the shown order: a viewer orders groups by their first part, so this keeps the group order too
+    const shown = [];
+    state.groups.forEach((g) => g.parts.forEach((p) => shown.push(p)));
+    out.parts = shown.map((p) => {
       const o = Object.assign({}, baseParts[p.id] || {}, { id: p.id, name: p.name, group: p.groupId, material: p.matKey });
       const scad = window.mockupScad && window.mockupScad.partScad ? window.mockupScad.partScad(p.id) : null;
       if (scad) { o.scad = scad; delete o.file; } else o.file = p.file;
+      // a source edited in the manifest editor: a part file, or an OpenSCAD file and its defines
+      const src = (state.edits.parts[p.id] || {}).source;
+      if (src && src.kind === 'scad') o.scad = { file: src.file, defines: src.defines || {} };
+      else if (src) { o.file = src.file; delete o.scad; }
       return o;
     });
     out.groups = {};
@@ -970,16 +1205,16 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     });
     return out;
   }
-  async function copyManifest() {
+  // note and box: where to report, and the text box shown when the clipboard is blocked
+  async function copyManifest(note, box) {
     const json = JSON.stringify(currentManifest(), null, 2);
-    const box = $('arrJson');
     box.value = json;
     try {
       await navigator.clipboard.writeText(json);
-      $('arrNote').textContent = 'Copied. Save it as manifest.json next to your part files, then load them together.';
+      note.textContent = 'Copied. Save it as manifest.json next to your part files, then load them together.';
       box.hidden = true;
     } catch (e) {
-      $('arrNote').textContent = 'Copy is blocked here. Select the text below and copy it, then save it as manifest.json.';
+      note.textContent = 'Copy is blocked here. Select the text below and copy it, then save it as manifest.json.';
       box.hidden = false; box.focus(); box.select();
     }
   }
@@ -992,8 +1227,994 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     $('arrJson').hidden = true;
     renderParts();
   }
-  $('arrCopy').addEventListener('click', copyManifest);
-  $('arrReset').addEventListener('click', () => { state.edits = { parts: {}, groups: {} }; saveEdits(); arrange(); $('arrNote').textContent = 'Back to the original arrangement.'; });
+  $('arrCopy').addEventListener('click', () => copyManifest($('arrNote'), $('arrJson')));
+  $('arrReset').addEventListener('click', () => {
+    applyEdit(null, (ed) => { ed.parts = {}; ed.groups = {}; delete ed.lists.partOrder; });
+    $('arrNote').textContent = 'Back to the original arrangement.';
+  });
+
+  // ---------- manifest editor (dialog) ----------
+  // Each section: what it controls and how to use it (shown at its top), an optional count for the section list,
+  // how to draw it, and what Reset section clears. Edits go through applyEdit, like Arrange's.
+  const PAGE_FIELDS = [['name', 'Title', ''], ['subtitle', 'Subtitle', ''], ['eyebrow', 'Eyebrow', '3D mockup'], ['units', 'Units', 'mm']];
+  const ED_SECTIONS = [
+    {
+      id: 'page', title: 'Page',
+      help: ['The text around the model: the small eyebrow line above the title, the title, and the line under it. Units appear after the overall size and in the spec sheet. The up axis says which way the model stands.',
+        'type in a field and the page changes as you type. An empty title shows "Loaded model", an empty eyebrow shows "3D mockup", and an empty subtitle is hidden. Z up is the OpenSCAD convention; most GLB files are Y up.'],
+      render: edPageSection,
+      reset: (ed) => { PAGE_FIELDS.forEach(([k]) => { delete ed.page[k]; }); delete ed.page.up; }
+    },
+    {
+      id: 'parts', title: 'Parts', count: () => String(state.parts.length),
+      help: ['Parts are the separate pieces of the model: one per STL file, 3MF object, GLB mesh or OpenSCAD part. Each part sits in a group, and everything in a group moves together in the Exploded view.',
+        'drag a part by its grip to reorder it or drop it into another group, or use the arrow buttons (or the arrow keys on the grip). Choose Edit to change its name, group, colour or source. The id can\'t be changed: it names the part\'s default file and the edits remembered in this browser. A new source is written to the manifest; the 3D view keeps the shapes already loaded until you load the files again.'],
+      render: edPartsSection,
+      reset: (ed) => { ed.parts = {}; delete ed.lists.partOrder; }
+    },
+    {
+      id: 'groups', title: 'Groups', count: () => String(state.groups.size),
+      help: ['Groups are parts that move together. Each has a name, how far it moves in the Exploded view, and what it does in See inside.',
+        'drag a group by its grip, or use the arrow buttons, to change the order. Set the offsets in the model\'s units along each axis; the model switches to Exploded so you can see it. Delete group puts its parts into groups of their own. To start a new group, choose "New group…" for a part in Parts or Arrange.'],
+      render: edGroupsSection,
+      reset: (ed) => { ed.groups = {}; delete ed.lists.partOrder; }
+    },
+    {
+      id: 'views', title: 'Views', count: () => String(views().length),
+      help: ['Views are the camera buttons under the model. Choose which ones appear and which one the page opens on.',
+        'tick a stock view to show it and untick it to hide it. To add your own angle, turn the model in the preview to the shot you want and press "Add view from current camera". Drag a view by its grip, or use the arrow buttons, to change the order of the buttons.'],
+      render: edViewsSection,
+      reset: (ed) => { delete ed.lists.views; delete ed.page.defaultView; }
+    },
+    {
+      id: 'finishes', title: 'Finishes', count: () => String(finishes().length),
+      help: ['Finishes are the colour swatches. Each one recolours every part whose material is "Finish colour", so you can compare filament colours.',
+        'change a swatch\'s name or colour, remove it, or add one, and drag it by its grip (or use the arrow buttons) to reorder. The first swatch is the one the page opens with; "Make default" moves a swatch to the front.'],
+      render: edFinishesSection,
+      reset: (ed) => { delete ed.lists.finishes; }
+    },
+    {
+      id: 'spec', title: 'Spec sheet', count: () => String(specSections().length),
+      help: ['The spec sheet is the panel beside the parts list: sizes, ports, mounting, print notes. It is made of sections, and each section is a table of label/value rows, a bullet list, or a paragraph.',
+        'edit titles and text in place. Drag a section, row or bullet by its grip to reorder it (sections also have arrow buttons, and every grip takes the arrow keys). Change a section\'s type with "Shown as"; its text carries over. "Model data" is calculated from the model and can\'t be edited.'],
+      render: edSpecSection,
+      reset: (ed) => { delete ed.lists.spec; }
+    },
+    {
+      id: 'json', title: 'Raw JSON', sep: true,
+      count: () => (edJson.draft === null ? '' : edJson.problems.length ? edJson.problems.length + (edJson.problems.length === 1 ? ' error' : ' errors') : 'not applied'),
+      help: ['The whole manifest as text: exactly what Copy manifest produces. Useful for pasting a manifest from somewhere else, or for bulk edits.',
+        'edit the text, then press Apply JSON. It is checked as you type and nothing changes until it is valid; each problem says what to fix and on which line. Parts can\'t be added or removed here, because their shapes come from the loaded files.'],
+      render: edJsonSection,
+      reset: () => { edJson.draft = null; }
+    }
+  ];
+  let edSection = 'page';
+  const stageSpot = document.createComment('stage');
+  const wideEditor = window.matchMedia('(min-width: 761px)');
+
+  function openEditor() {
+    if (!state.parts.length) return;
+    $('edNote').textContent = ''; $('edJson').hidden = true;
+    // the live preview is the viewer's own 3D stage, moved into the dialog while it is open
+    if (wideEditor.matches) { stage.parentNode.insertBefore(stageSpot, stage); $('edPreview').appendChild(stage); }
+    $('editor').showModal();
+    edRender();
+  }
+  $('editor').addEventListener('close', () => {
+    if (stageSpot.parentNode) { stageSpot.parentNode.insertBefore(stage, stageSpot); stageSpot.remove(); }
+    $('edOpen').focus();
+  });
+  $('edOpen').addEventListener('click', openEditor);
+  $('edClose').addEventListener('click', () => $('editor').close());
+  $('edDone').addEventListener('click', () => $('editor').close());
+  $('edUndo').addEventListener('click', undo);
+  $('edRedo').addEventListener('click', redo);
+  $('edCopy').addEventListener('click', () => copyManifest($('edNote'), $('edJson')));
+  $('edResetSection').addEventListener('click', () => { applyEdit(null, edCurrent().reset); edRender(); });
+  $('edResetAll').addEventListener('click', () => { applyEdit(null, (ed) => { EDIT_KEYS.forEach((k) => { ed[k] = {}; }); }); edRender(); });
+
+  function edCurrent() { return ED_SECTIONS.find((s) => s.id === edSection) || ED_SECTIONS[0]; }
+  // redraw everything in the dialog (open, section switch, undo, reset, new model)
+  function edRender() {
+    if (!$('editor').open) return;
+    const active = document.activeElement;
+    const focusId = edFocusAfter || (active && $('editor').contains(active) ? active.id : null);
+    edFocusAfter = null;
+    const scroll = $('edMain').scrollTop;
+    const nav = $('edNav'); nav.textContent = '';
+    ED_SECTIONS.forEach((s) => {
+      const b = document.createElement('button'); b.type = 'button'; b.id = 'ed-nav-' + s.id;
+      b.setAttribute('aria-current', String(s.id === edSection));
+      const c = el('span'); c.className = 'count'; c.id = 'ed-count-' + s.id;
+      b.append(el('span', s.title), c);
+      b.addEventListener('click', () => { edSection = s.id; edRender(); });
+      if (s.sep) { const sep = el('div'); sep.className = 'ed-sep'; sep.setAttribute('aria-hidden', 'true'); nav.appendChild(sep); }
+      nav.appendChild(b);
+    });
+    const sec = edCurrent();
+    const host = $('edMain'); host.textContent = '';
+    const help = el('div'); help.className = 'ed-help';
+    const how = el('p'); how.append(el('b', 'How to use: '), sec.help[1]);
+    help.append(el('p', sec.help[0]), how);
+    host.append(el('h3', sec.title), help);
+    sec.render(host);
+    host.scrollTop = scroll;
+    if (focusId && $(focusId)) $(focusId).focus();
+    edChanged();
+  }
+  // refresh the parts that follow every edit, leaving the field being typed in alone
+  function edChanged() {
+    if (!$('editor').open) return;
+    $('edSub').textContent = (pageInfo().name || 'Loaded model') + ' · ' + state.parts.length + (state.parts.length === 1 ? ' part' : ' parts');
+    const list = editChanges();
+    ED_SECTIONS.forEach((s) => {
+      const n = list.filter((c) => c.section === s.id).length;
+      const c = $('ed-count-' + s.id);
+      if (c) c.textContent = [s.count ? s.count() : '', n ? n + ' changed' : ''].filter(Boolean).join(' · ');
+    });
+    const ul = $('edChanges'); ul.textContent = '';
+    list.forEach((c) => ul.appendChild(el('li', c.text)));
+    $('edChangesTitle').textContent = list.length ? 'Changes (' + list.length + ')' : 'Changes';
+    $('edNoChanges').hidden = list.length > 0;
+    $('edResetAll').hidden = !list.length;
+    $('edCount').textContent = list.length ? list.length + (list.length === 1 ? ' change' : ' changes') + ' from the loaded manifest' : 'No changes';
+    $('edUndo').disabled = !edHistory.undo.length;
+    $('edRedo').disabled = !edHistory.redo.length;
+  }
+
+  // small builders for editor fields
+  function edInput(id, value, label, onInput, opts) {
+    const i = document.createElement('input'); i.type = 'text'; i.id = id; i.value = value == null ? '' : String(value);
+    if (opts && opts.placeholder) i.placeholder = opts.placeholder;
+    if (opts && opts.readOnly) i.readOnly = true;
+    if (label) i.setAttribute('aria-label', label);
+    if (onInput) i.addEventListener('input', () => onInput(i.value));
+    return i;
+  }
+  function edButton(text, onClick, opts) {
+    opts = opts || {};
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn small' + (opts.cls ? ' ' + opts.cls : ''); b.textContent = text;
+    if (opts.id) b.id = opts.id;
+    if (opts.label) b.setAttribute('aria-label', opts.label);
+    b.disabled = !!opts.disabled;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+  // adding, removing or switching something changes the section's shape: apply the edit, then redraw the section
+  function edStructural(fn) { applyEdit(null, fn); edRender(); }
+
+  function edPageSection(host) {
+    const grid = el('div'); grid.className = 'ed-fields';
+    const mf = pageInfo();
+    PAGE_FIELDS.forEach(([k, label, dflt]) => {
+      const i = edInput('ed-page-' + k, mf[k] || '', null, (v) => applyEdit('page:' + k, (ed) => {
+        if (v === (state.manifest[k] || '')) delete ed.page[k]; else ed.page[k] = v;
+      }), { placeholder: dflt });
+      const f = fld(label, i, true);
+      if (k === 'subtitle') f.classList.add('wide');
+      grid.appendChild(f);
+    });
+    const up = document.createElement('select'); up.id = 'ed-page-up';
+    up.append(opt('z', 'Z up (OpenSCAD)', state.up === 'z'), opt('y', 'Y up (most GLB files)', state.up === 'y'));
+    up.addEventListener('change', () => applyEdit(null, (ed) => { if (up.value === state.baseUp) delete ed.page.up; else ed.page.up = up.value; }));
+    grid.appendChild(fld('Up axis', up, true));
+    host.appendChild(grid);
+  }
+
+  // ----- Raw JSON -----
+  const edJson = { draft: null, problems: [] }; // draft: unapplied text, null while the box shows the current manifest
+  const JSON_CHECKS = ['Valid JSON', 'Page fields', 'Every loaded part listed once, and no others', 'Materials and colours', 'Groups', 'Views', 'Spec sheet'];
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  const isHex = (v) => typeof v === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
+  // Check manifest text. Returns {manifest, problems: [{line, text}], checks: [{label, state: ok|bad|skip}]}.
+  function checkManifestJson(text) {
+    const problems = [], bad = new Set();
+    // line of the last step found, searching each step after the previous one (strings or patterns)
+    const lineOf = (...steps) => {
+      let at = 0;
+      for (const st of steps) {
+        let k;
+        if (typeof st === 'string') k = text.indexOf(st, at);
+        else { const r = new RegExp(st.source, 'g'); r.lastIndex = at; const m = r.exec(text); k = m ? m.index : -1; }
+        if (k < 0) break;
+        at = k;
+      }
+      return text.slice(0, at).split('\n').length;
+    };
+    const esc = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const idAt = (id) => lineOf('"parts"', new RegExp('"id"\\s*:\\s*"' + esc(id) + '"'));
+    const fail = (check, line, msg) => { bad.add(check); problems.push({ line, text: msg }); };
+    const result = (M) => ({ manifest: M, problems: problems.sort((x, y) => (x.line || 0) - (y.line || 0)), checks: JSON_CHECKS.map((label, i) => ({ label, state: !M && i > 0 ? 'skip' : bad.has(i) ? 'bad' : 'ok' })) });
+    let M;
+    try { M = JSON.parse(text); } catch (e) {
+      const msg = String(e && e.message ? e.message : e);
+      const lc = /line (\d+)/.exec(msg), pos = /position (\d+)/.exec(msg);
+      const line = lc ? +lc[1] : pos ? text.slice(0, +pos[1]).split('\n').length : null;
+      fail(0, line, 'This isn\'t valid JSON (' + msg + '). Look for a missing comma, quote or bracket' + (line ? ' on or just before this line.' : '.'));
+      return result(null);
+    }
+    if (!M || typeof M !== 'object' || Array.isArray(M)) { fail(0, 1, 'The manifest must be one object, { … }, with "parts" and the other fields inside it.'); return result(null); }
+
+    // page fields
+    if ('up' in M && M.up !== 'z' && M.up !== 'y') fail(1, lineOf('"up"'), '"up" must be "z" (OpenSCAD) or "y" (most GLB files).');
+    ['name', 'subtitle', 'eyebrow', 'units'].forEach((k) => { if (k in M && typeof M[k] !== 'string') fail(1, lineOf('"' + k + '"'), '"' + k + '" must be text in quotes.'); });
+
+    // parts
+    const loaded = state.parts.map((p) => p.id);
+    if (!Array.isArray(M.parts)) fail(2, lineOf('"parts"'), '"parts" must be a list, [ … ], with one entry for each loaded part.');
+    else {
+      const seen = new Set();
+      M.parts.forEach((mp, k) => {
+        if (!mp || typeof mp !== 'object' || typeof mp.id !== 'string') { fail(2, lineOf('"parts"'), 'Part ' + (k + 1) + ' has no "id". Every part needs the id it was loaded with.'); return; }
+        const line = idAt(mp.id);
+        if (seen.has(mp.id)) fail(2, line, 'Part "' + mp.id + '" is listed twice. List each part once.');
+        seen.add(mp.id);
+        const p = state.parts.find((q) => q.id === mp.id);
+        if (!p) fail(2, line, 'There is no loaded part "' + mp.id + '". Parts can\'t be added here, because their shapes come from the loaded files. Check the spelling, or remove it. Loaded ids: ' + loaded.join(', ') + '.');
+        if ('name' in mp && typeof mp.name !== 'string') fail(2, line, 'Part "' + mp.id + '": "name" must be text.');
+        if ('file' in mp && typeof mp.file !== 'string') fail(2, line, 'Part "' + mp.id + '": "file" must be text, like "lid.stl".');
+        if ('scad' in mp && (!mp.scad || typeof mp.scad.file !== 'string' || ('defines' in mp.scad && (typeof mp.scad.defines !== 'object' || Array.isArray(mp.scad.defines)))))
+          fail(2, line, 'Part "' + mp.id + '": "scad" needs a "file", and optional "defines", like { "file": "case.scad", "defines": { "part": "lid" } }.');
+        if ('group' in mp && typeof mp.group !== 'string') fail(4, line, 'Part "' + mp.id + '": "group" must be a group id in quotes.');
+        if ('material' in mp) {
+          const m = mp.material;
+          const ok = typeof m === 'string' && (PRESETS[m] || /^#?[0-9a-f]{6}$/i.test(m) || (m === 'keep' && p && p.origMaterial));
+          if (!ok) fail(3, line, m === 'keep' ? 'Part "' + mp.id + '": "keep" only works for a GLB part that has its own material.'
+            : 'Part "' + mp.id + '": the material ' + JSON.stringify(m) + ' isn\'t known. Use one of ' + Object.keys(PRESETS).join(', ') + ', or a colour like "#3a3e41".');
+        }
+      });
+      loaded.filter((id) => !seen.has(id)).forEach((id) => fail(2, lineOf('"parts"'), 'Loaded part "' + id + '" is missing. Parts can\'t be removed here; put it back. (To hide it, untick it in the parts list.)'));
+    }
+
+    // groups
+    if ('groups' in M && (!M.groups || typeof M.groups !== 'object' || Array.isArray(M.groups))) fail(4, lineOf('"groups"'), '"groups" must be an object, { "lid": { … }, … }, keyed by group id.');
+    else Object.keys(M.groups || {}).forEach((gid) => {
+      const g = M.groups[gid];
+      const line = (key) => lineOf('"groups"', '"' + gid + '"', key ? '"' + key + '"' : '"' + gid + '"');
+      if (!g || typeof g !== 'object' || Array.isArray(g)) { fail(4, line(), 'Group "' + gid + '" must be an object, like { "label": "Lid", "explode": [0, 0, 48] }.'); return; }
+      if ('label' in g && typeof g.label !== 'string') fail(4, line('label'), 'Group "' + gid + '": "label" must be text.');
+      if ('explode' in g && !(Array.isArray(g.explode) && g.explode.length === 3 && g.explode.every(isNum)))
+        fail(4, line('explode'), 'Group "' + gid + '": "explode" needs 3 numbers, X, Y and Z in model units, for example [0, 0, 48].');
+      if ('inside' in g && !['hide', 'ghost', 'none'].includes(g.inside)) fail(4, line('inside'), 'Group "' + gid + '": "inside" must be "hide", "ghost" or "none".');
+    });
+
+    // finishes
+    if ('finishes' in M) {
+      if (!Array.isArray(M.finishes)) fail(3, lineOf('"finishes"'), '"finishes" must be a list of { "name": …, "color": "#rrggbb" }.');
+      else M.finishes.forEach((f, k) => {
+        if (!f || typeof f.name !== 'string') fail(3, lineOf('"finishes"'), 'Finish ' + (k + 1) + ' needs a "name".');
+        else if (!isHex(f.color)) fail(3, lineOf('"finishes"', '"' + f.name + '"'), 'Finish "' + f.name + '": "color" must be a colour like "#3a3e41".');
+      });
+    }
+
+    // views
+    const viewNames = [];
+    if ('views' in M) {
+      if (!Array.isArray(M.views)) fail(5, lineOf('"views"'), '"views" must be a list, like ["front", "top", "iso"].');
+      else M.views.forEach((v, k) => {
+        if (typeof v === 'string') {
+          if (!STOCK_VIEWS[v]) fail(5, lineOf('"views"', '"' + v + '"'), 'View "' + v + '" isn\'t a stock view. Stock views are ' + Object.keys(STOCK_VIEWS).join(', ') + '; for your own angle use { "name": "…", "dir": [x, y, z] }.');
+          else viewNames.push(v);
+        } else if (!v || typeof v.name !== 'string' || !(Array.isArray(v.dir) && v.dir.length === 3 && v.dir.every(isNum)))
+          fail(5, lineOf('"views"'), 'View ' + (k + 1) + ' needs a "name" and a "dir" of 3 numbers, like { "name": "Port side", "dir": [-1, -0.3, 0.4] }.');
+        else viewNames.push(slug(v.name));
+      });
+    }
+    if ('defaultView' in M) {
+      const names = 'views' in M ? viewNames : (state.manifest.views && state.manifest.views.length ? state.manifest.views : DEFAULT_VIEWS).map(viewName);
+      if (typeof M.defaultView !== 'string' || (M.defaultView && !names.includes(M.defaultView)))
+        fail(5, lineOf('"defaultView"'), '"defaultView" must name one of the views: ' + names.join(', ') + ' (custom views by their name in lower case, with dashes for spaces).');
+    }
+
+    // spec sheet
+    if ('spec' in M) {
+      if (!Array.isArray(M.spec)) fail(6, lineOf('"spec"'), '"spec" must be a list of sections, like [{ "title": "Size", "rows": [["Outside", "70 × 50 mm"]] }].');
+      else M.spec.forEach((sec, k) => {
+        const where = 'Spec section ' + (k + 1) + (sec && typeof sec.title === 'string' ? ' ("' + sec.title + '")' : '');
+        const line = lineOf('"spec"', sec && typeof sec.title === 'string' ? '"' + sec.title + '"' : '"spec"');
+        if (!sec || typeof sec !== 'object' || Array.isArray(sec)) { fail(6, line, where + ' must be an object with a "title" and "rows", "items" or "text".'); return; }
+        if ('title' in sec && typeof sec.title !== 'string') fail(6, line, where + ': "title" must be text.');
+        if ('rows' in sec && !(Array.isArray(sec.rows) && sec.rows.every((r) => Array.isArray(r) && r.length === 2)))
+          fail(6, line, where + ': "rows" must be a list of [label, value] pairs.');
+        if ('items' in sec && !(Array.isArray(sec.items) && sec.items.every((t) => typeof t === 'string'))) fail(6, line, where + ': "items" must be a list of text.');
+        if ('text' in sec && typeof sec.text !== 'string') fail(6, line, where + ': "text" must be text.');
+      });
+    }
+    return result(M);
+  }
+
+  // edits that make the current manifest match M (M has passed the checks)
+  function editsFromManifest(M) {
+    const base = state.manifest, ed = { parts: {}, groups: {}, page: {}, lists: {} };
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    // page fields, and any other top-level field (kept as given)
+    Object.keys(M).forEach((k) => {
+      if (['parts', 'groups', 'views', 'finishes', 'spec'].includes(k)) return;
+      if (k === 'up') { if (M.up !== state.baseUp) ed.page.up = M.up; return; }
+      if (!same(M[k], base[k])) ed.page[k] = M[k];
+    });
+    ['name', 'subtitle', 'eyebrow', 'units', 'defaultView'].forEach((k) => { if (!(k in M) && base[k] !== undefined) ed.page[k] = ''; });
+    const views = M.views && M.views.length ? M.views : DEFAULT_VIEWS;
+    if (!same(views, baseViews())) ed.lists.views = views;
+    const fin = M.finishes && M.finishes.length ? M.finishes : DEFAULT_FINISHES;
+    if (!same(fin, baseFinishes())) ed.lists.finishes = fin;
+    if (!same(M.spec || [], base.spec || [])) ed.lists.spec = M.spec || [];
+    M.parts.forEach((mp) => {
+      const p = state.parts.find((q) => q.id === mp.id);
+      setPartEdit(ed, p, 'name', mp.name || p.baseName, p.baseName);
+      setPartEdit(ed, p, 'group', mp.group || p.id, p.baseGroup);
+      setPartEdit(ed, p, 'material', mp.material || p.baseMat, p.baseMat);
+      const src = mp.scad ? { kind: 'scad', file: mp.scad.file, defines: mp.scad.defines || {} } : mp.file ? { kind: 'file', file: mp.file } : null;
+      if (src) setPartEdit(ed, p, 'source', src, baseSource(p));
+    });
+    const order = M.parts.map((x) => x.id);
+    if (!same(order, state.parts.map((p) => p.id))) ed.lists.partOrder = order;
+    Object.keys(M.groups || {}).forEach((gid) => {
+      const g = M.groups[gid], b = (base.groups && base.groups[gid]) || {}, cur = state.groups.get(gid), e = {};
+      if (g.label !== undefined && g.label !== b.label && !(cur && b.label === undefined && cur.label === g.label)) e.label = g.label;
+      // a calculated offset or see-inside default written out by Copy manifest isn't a change
+      const autoEx = cur && cur.autoExplode && same(g.explode, cur.explode.toArray().map((n) => Math.round(n * 10) / 10));
+      if (Array.isArray(g.explode) && !same(g.explode, b.explode) && !autoEx) e.explode = g.explode;
+      const autoIn = cur && b.inside === undefined && (cur.inside || 'none') === g.inside;
+      if (g.inside !== undefined && g.inside !== b.inside && !autoIn) e.inside = g.inside;
+      if (Object.keys(e).length) ed.groups[gid] = e;
+    });
+    return ed;
+  }
+
+  function goToLine(ta, n) {
+    const lines = ta.value.split('\n'), start = lines.slice(0, n - 1).reduce((a, l) => a + l.length + 1, 0);
+    ta.focus();
+    ta.setSelectionRange(start, start + (lines[n - 1] || '').length);
+    const lh = parseFloat(getComputedStyle(ta).lineHeight) || 18;
+    ta.scrollTop = Math.max(0, (n - 4) * lh);
+  }
+  function drawJsonChecks(host, res, ta) {
+    host.textContent = '';
+    res.problems.forEach((pr) => {
+      const box = el('div'); box.className = 'ed-problem';
+      const t = el('span');
+      if (pr.line) t.append(el('b', 'Line ' + pr.line + ': '));
+      t.append(pr.text);
+      box.append(t);
+      if (pr.line) box.append(edButton('Go to line ' + pr.line, () => goToLine(ta, pr.line)));
+      host.append(box);
+    });
+    const ul = el('ul');
+    res.checks.forEach((c) => {
+      const li = el('li'); li.className = c.state;
+      const mark = el('span', c.state === 'ok' ? '✓' : c.state === 'bad' ? '✗' : '–'); mark.className = 'mark'; mark.setAttribute('aria-hidden', 'true');
+      li.append(mark, el('span', c.label + (c.state === 'ok' ? '' : c.state === 'bad' ? ': see above' : ' (checked once the JSON is valid)')));
+      ul.append(li);
+    });
+    const title = el('span', 'Checks'); title.className = 'fl';
+    host.append(title, ul);
+  }
+  function edJsonSection(host) {
+    const current = () => JSON.stringify(currentManifest(), null, 2);
+    const ta = document.createElement('textarea'); ta.id = 'ed-json'; ta.className = 'ed-json';
+    ta.spellcheck = false; ta.setAttribute('wrap', 'off'); ta.setAttribute('aria-label', 'Manifest JSON'); ta.setAttribute('aria-describedby', 'ed-json-checks');
+    ta.value = edJson.draft !== null ? edJson.draft : current();
+    const note = el('p'); note.id = 'ed-json-note'; note.className = 'ed-err'; note.setAttribute('role', 'status');
+    const checks = el('div'); checks.className = 'ed-checks'; checks.id = 'ed-json-checks';
+    const apply = edButton('Apply JSON', () => {
+      const res = checkManifestJson(ta.value);
+      if (res.problems.length) return;
+      const next = editsFromManifest(res.manifest);
+      applyEdit(null, (ed) => { EDIT_KEYS.forEach((k) => { ed[k] = next[k]; }); });
+      edJson.draft = null;
+      edRender();
+      $('ed-json-note').textContent = 'Applied. The model and every section now match the JSON.';
+    }, { id: 'ed-json-apply', cls: 'primary' });
+    const refresh = () => {
+      const res = checkManifestJson(ta.value);
+      edJson.problems = res.problems;
+      drawJsonChecks(checks, res, ta);
+      apply.disabled = !!res.problems.length || edJson.draft === null;
+      edChanged();
+    };
+    const changed = () => { edJson.draft = ta.value === current() ? null : ta.value; refresh(); };
+    const setText = (v, msg) => { ta.value = v; changed(); note.textContent = msg || ''; };
+    ta.addEventListener('input', () => { note.textContent = ''; changed(); });
+    const bar = el('div'); bar.className = 'ed-row';
+    const sp = el('span'); sp.className = 'grow';
+    bar.append(
+      edButton('Format', () => {
+        try { setText(JSON.stringify(JSON.parse(ta.value), null, 2)); } catch (e) { note.textContent = 'Fix the JSON problems below first, then format.'; }
+      }, { id: 'ed-json-format' }),
+      edButton('Paste manifest', async () => {
+        try { setText(await navigator.clipboard.readText(), 'Pasted. Check it, then press Apply JSON.'); }
+        catch (e) { note.textContent = 'Paste is blocked here. Click in the box, select all, and paste with Ctrl+V (Cmd+V on a Mac).'; ta.focus(); }
+      }, { id: 'ed-json-paste' }),
+      edButton('Revert to current', () => setText(current(), 'Back to the current manifest.'), { id: 'ed-json-revert' }),
+      sp, apply);
+    host.append(bar, ta, note, checks);
+    refresh();
+  }
+
+  // ----- reordering: drag handles (mouse, touch and pen), arrow keys on the handle, and up/down buttons -----
+  let edFocusAfter = null; // id to focus after the next redraw, so focus follows an item moved from the keyboard
+  const GRIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
+  function moveItem(arr, from, to) { const a = arr.slice(); a.splice(to, 0, a.splice(from, 1)[0]); return a; }
+  // A drag handle. Sortable lists are elements with data-sort-list="<scope>" and their items have data-sort="<scope>".
+  // drop(list, index) gets the list under the pointer and the index among its items, not counting the dragged one.
+  // step(-1 | 1) moves the item from the keyboard.
+  function edHandle(id, label, item, scope, drop, step) {
+    const h = document.createElement('button'); h.type = 'button'; h.className = 'ed-handle'; h.id = id;
+    h.setAttribute('aria-label', 'Reorder ' + label + ': drag, or use the up and down arrow keys');
+    h.innerHTML = GRIP;
+    h.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      step(e.key === 'ArrowUp' ? -1 : 1);
+    });
+    h.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      try { h.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
+      const main = $('edMain');
+      const lists = Array.from(main.querySelectorAll('[data-sort-list="' + scope + '"]'));
+      const marker = el('div'); marker.className = 'ed-drop'; marker.setAttribute('aria-hidden', 'true');
+      item.classList.add('dragging');
+      let target = null;
+      const place = (y) => {
+        const r = main.getBoundingClientRect();
+        if (y < r.top + 40) main.scrollTop -= 12; else if (y > r.bottom - 40) main.scrollTop += 12;
+        let list = null, best = Infinity;
+        lists.forEach((l) => {
+          const b = l.getBoundingClientRect();
+          const d = y < b.top ? b.top - y : y > b.bottom ? y - b.bottom : 0;
+          if (d < best) { best = d; list = l; }
+        });
+        const items = Array.from(list.children).filter((c) => c.dataset.sort === scope && c !== item);
+        let index = items.findIndex((c) => { const b = c.getBoundingClientRect(); return y < b.top + b.height / 2; });
+        if (index < 0) index = items.length;
+        target = { list, index };
+        if (index < items.length) list.insertBefore(marker, items[index]);
+        else if (items.length) items[items.length - 1].after(marker);
+        else list.appendChild(marker);
+      };
+      const move = (ev) => place(ev.clientY);
+      const finish = (commit) => {
+        h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', cancel);
+        item.classList.remove('dragging'); marker.remove();
+        if (commit && target) { edFocusAfter = id; drop(target.list, target.index); }
+      };
+      const up = () => finish(true);
+      const cancel = () => finish(false);
+      h.addEventListener('pointermove', move); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', cancel);
+    });
+    return h;
+  }
+  const ICON_UP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
+  const ICON_DOWN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  // Move up / Move down buttons for item i of n; step(-1 | 1) does the move
+  function edMoveButtons(idBase, label, i, n, step) {
+    const up = edButton('', () => step(-1), { id: idBase + '-up', cls: 'icon', label: 'Move ' + label + ' up', disabled: i === 0 });
+    const down = edButton('', () => step(1), { id: idBase + '-down', cls: 'icon', label: 'Move ' + label + ' down', disabled: i === n - 1 });
+    up.innerHTML = ICON_UP; down.innerHTML = ICON_DOWN;
+    return [up, down];
+  }
+
+  // the parts of each group in the shown order: [[groupId, [partId…]], …]
+  function partLayout() { return Array.from(state.groups.values()).map((g) => [g.id, g.parts.map((p) => p.id)]); }
+  // apply a new layout: parts that changed group get a group edit, and the flattened ids become the part order
+  function setPartLayout(ed, layout) {
+    layout.forEach(([gid, ids]) => ids.forEach((id) => {
+      const p = state.parts.find((q) => q.id === id);
+      if (p.groupId !== gid) setPartEdit(ed, p, 'group', gid, p.baseGroup);
+    }));
+    const order = [].concat(...layout.map((x) => x[1]));
+    if (JSON.stringify(order) === JSON.stringify(state.parts.map((p) => p.id))) delete ed.lists.partOrder; else ed.lists.partOrder = order;
+  }
+  // the order the loaded manifest gives, grouped as now: Map(groupId -> [partId…]), groups by first part
+  function naturalLayout() {
+    const nat = new Map();
+    state.parts.forEach((p) => { if (!nat.has(p.groupId)) nat.set(p.groupId, []); nat.get(p.groupId).push(p.id); });
+    return nat;
+  }
+
+  // ----- Parts -----
+  let edOpenPart = null;
+  // set one field of a part's edits; a value equal to the loaded one removes the edit
+  function setPartEdit(ed, p, key, value, base) {
+    const e = Object.assign({}, ed.parts[p.id]);
+    if (JSON.stringify(value) === JSON.stringify(base)) delete e[key]; else e[key] = value;
+    if (Object.keys(e).length) ed.parts[p.id] = e; else delete ed.parts[p.id];
+  }
+  function baseSource(p) {
+    const bp = (state.manifest.parts || []).find((q) => q.id === p.id) || {};
+    const scad = bp.scad || (window.mockupScad && window.mockupScad.partScad ? window.mockupScad.partScad(p.id) : null);
+    return scad ? { kind: 'scad', file: scad.file, defines: scad.defines || {} } : { kind: 'file', file: p.file };
+  }
+  function partSource(p) { return (state.edits.parts[p.id] || {}).source || baseSource(p); }
+  function definesText(d) { return Object.keys(d || {}).map((k) => k + ' = ' + JSON.stringify(d[k])).join(', '); }
+  // 'part = "lid", wall = 3' -> {part: 'lid', wall: 3}; null when it can't be read
+  function parseDefines(text) {
+    const src = text.trim(), out = {};
+    const re = /\s*([A-Za-z_$][\w$]*)\s*=\s*("(?:[^"\\]|\\.)*"|\[[^\]]*\]|[^,;\n]+?)\s*(?:[,;\n]+|$)/y;
+    let i = 0;
+    while (i < src.length) {
+      re.lastIndex = i;
+      const m = re.exec(src);
+      if (!m) return null;
+      let v = m[2].trim();
+      try { v = JSON.parse(v); } catch (e) { /* a bare word stays text */ }
+      out[m[1]] = v; i = re.lastIndex;
+    }
+    return out;
+  }
+  function edPartsSection(host) {
+    state.groups.forEach((g) => {
+      const list = el('div'); list.className = 'ed-list';
+      list.dataset.sortList = 'parts'; list.dataset.group = g.id;
+      const head = el('div'); head.className = 'fl';
+      head.append(el('span', g.label), el('span', g.parts.length + (g.parts.length === 1 ? ' part' : ' parts')));
+      list.appendChild(head);
+      g.parts.forEach((p, i) => list.appendChild(edPartCard(p, i, g)));
+      host.appendChild(list);
+    });
+  }
+  function edPartCard(p, i, g) {
+    const open = edOpenPart === p.id;
+    const src = partSource(p);
+    const card = el('div'); card.className = 'ed-card' + (open ? ' open' : ''); card.dataset.sort = 'parts';
+    const grip = 'ed-part-' + p.id + '-grip';
+    const step = (d) => {
+      const layout = partLayout(), ids = layout.find((x) => x[0] === g.id)[1], k = ids.indexOf(p.id);
+      if (k + d < 0 || k + d >= ids.length) return;
+      layout.find((x) => x[0] === g.id)[1] = moveItem(ids, k, k + d);
+      edFocusAfter = grip;
+      edStructural((ed) => setPartLayout(ed, layout));
+    };
+    // dropped into a group's list: take it out of its own, put it in at that place
+    const drop = (list, index) => {
+      const layout = partLayout().map(([gid, ids]) => [gid, ids.filter((x) => x !== p.id)]);
+      layout.find((x) => x[0] === list.dataset.group)[1].splice(index, 0, p.id);
+      edStructural((ed) => setPartLayout(ed, layout.filter((x) => x[1].length)));
+    };
+    const row = el('div'); row.className = 'ed-row';
+    const dot = el('span'); dot.className = 'dot'; dot.style.background = swatchHex(p);
+    const name = el('span', p.name); name.className = 'grow';
+    const mat = el('span', MAT_LABELS[p.matKey] || p.matKey); mat.className = 'meta';
+    const where = el('span', src.kind === 'scad' ? (definesText(src.defines) || src.file) : src.file); where.className = 'meta mono';
+    const edit = edButton(open ? 'Close' : 'Edit', () => { edOpenPart = open ? null : p.id; edRender(); },
+      { id: 'ed-part-edit-' + p.id, label: (open ? 'Close ' : 'Edit ') + p.name });
+    edit.setAttribute('aria-expanded', String(open));
+    row.append(edHandle(grip, p.name, card, 'parts', drop, step), dot, name, mat, where,
+      ...edMoveButtons('ed-part-' + p.id, p.name, i, g.parts.length, step), edit);
+    card.appendChild(row);
+    card.addEventListener('mouseenter', () => highlight(p, true));
+    card.addEventListener('mouseleave', () => highlight(p, false));
+    if (open) card.appendChild(edPartFields(p, src));
+    return card;
+  }
+  function edPartFields(p, src) {
+    const grid = el('div'); grid.className = 'ed-fields';
+    const nm = edInput('ed-part-name-' + p.id, p.name, null, (v) => applyEdit('part:' + p.id + ':name', (ed) => setPartEdit(ed, p, 'name', v.trim() || p.baseName, p.baseName)));
+    const id = edInput('ed-part-id-' + p.id, p.id, null, null, { readOnly: true });
+    const gs = document.createElement('select'); gs.id = 'ed-part-group-' + p.id;
+    state.groups.forEach((q) => gs.append(opt(q.id, q.label, q.id === p.groupId)));
+    gs.append(opt('__new', 'New group…'));
+    gs.addEventListener('change', () => edStructural((ed) => {
+      let gid = gs.value;
+      if (gid === '__new') {
+        let n = 1; while (state.groups.has('group-' + n)) n++;
+        gid = 'group-' + n;
+        ed.groups[gid] = Object.assign({}, ed.groups[gid], { label: 'Group ' + n });
+      }
+      setPartEdit(ed, p, 'group', gid, p.baseGroup);
+    }));
+    const ms = document.createElement('select'); ms.id = 'ed-part-mat-' + p.id; ms.className = 'grow';
+    const custom = /^#[0-9a-f]{6}$/i.test(p.matKey);
+    Object.keys(MAT_LABELS).forEach((k) => { if (k !== 'keep' || p.origMaterial) ms.append(opt(k, MAT_LABELS[k], k === p.matKey)); });
+    ms.append(opt('custom', 'Custom colour', custom));
+    const col = document.createElement('input'); col.type = 'color'; col.id = 'ed-part-col-' + p.id; col.className = 'ed-swatch';
+    col.hidden = !custom; col.value = custom ? p.matKey : '#888888'; col.setAttribute('aria-label', 'Custom colour for ' + p.name);
+    const setMat = (v) => applyEdit('part:' + p.id + ':mat', (ed) => setPartEdit(ed, p, 'material', v, p.baseMat));
+    ms.addEventListener('change', () => { setMat(ms.value === 'custom' ? col.value : ms.value); edRender(); });
+    col.addEventListener('input', () => setMat(col.value));
+    const mwrap = el('span'); mwrap.className = 'ed-row'; mwrap.append(ms, col);
+
+    const kind = document.createElement('select'); kind.id = 'ed-part-src-' + p.id;
+    kind.append(opt('file', 'Part file (STL, 3MF, GLB)', src.kind === 'file'), opt('scad', 'OpenSCAD file', src.kind === 'scad'));
+    const file = edInput('ed-part-file-' + p.id, src.file || '', null, null, { placeholder: src.kind === 'scad' ? 'case.scad' : p.id + '.stl' });
+    const defs = edInput('ed-part-defs-' + p.id, definesText(src.defines), null, null, { placeholder: 'part = "lid"' });
+    const defsFld = fld('Defines (-D values)', defs, true); defsFld.classList.add('wide'); defsFld.hidden = src.kind !== 'scad';
+    const err = el('p'); err.className = 'ed-err wide'; err.id = 'ed-part-err-' + p.id; err.setAttribute('role', 'status');
+    // a source that can't be read yet (no file, bad defines) is explained and not applied
+    const setSource = (step) => {
+      const d = kind.value === 'scad' ? parseDefines(defs.value) : {};
+      const f = file.value.trim();
+      err.textContent = !f ? (kind.value === 'scad' ? 'Name the .scad file.' : 'Name the part file.')
+        : d === null ? 'Write defines as name = value, separated by commas, for example part = "lid", wall = 3.' : '';
+      if (err.textContent) return;
+      const next = kind.value === 'scad' ? { kind: 'scad', file: f, defines: d } : { kind: 'file', file: f };
+      applyEdit(step, (ed) => setPartEdit(ed, p, 'source', next, baseSource(p)));
+    };
+    kind.addEventListener('change', () => {
+      const b = baseSource(p);
+      file.value = kind.value === b.kind ? b.file || '' : kind.value === 'file' ? p.file : '';
+      defs.value = kind.value === b.kind ? definesText(b.defines) : '';
+      file.placeholder = kind.value === 'scad' ? 'case.scad' : p.id + '.stl';
+      defsFld.hidden = kind.value !== 'scad';
+      setSource(null);
+    });
+    file.addEventListener('input', () => setSource('part:' + p.id + ':file'));
+    defs.addEventListener('input', () => setSource('part:' + p.id + ':defs'));
+
+    grid.append(fld('Part name', nm, true), fld('Id (fixed)', id, true), fld('Moves with group', gs, true), fld('Colour / material', mwrap, true),
+      fld('Source', kind, true), fld('File', file, true), defsFld, err);
+    return grid;
+  }
+
+  // ----- Groups -----
+  function edGroupsSection(host) {
+    const list = el('div'); list.className = 'ed-list'; list.dataset.sortList = 'groups';
+    const count = state.groups.size;
+    Array.from(state.groups.values()).forEach((g, gi) => {
+      const card = el('div'); card.className = 'ed-card'; card.dataset.sort = 'groups';
+      const grip = 'ed-group-' + g.id + '-grip';
+      const step = (d) => {
+        if (gi + d < 0 || gi + d >= count) return;
+        edFocusAfter = grip;
+        edStructural((ed) => setPartLayout(ed, moveItem(partLayout(), gi, gi + d)));
+      };
+      const top = el('div'); top.className = 'ed-row';
+      const title = el('span', g.label); title.className = 'grow';
+      top.append(edHandle(grip, g.label, card, 'groups', (l, index) => edStructural((ed) => setPartLayout(ed, moveItem(partLayout(), gi, index))), step),
+        title, ...edMoveButtons('ed-group-' + g.id, g.label, gi, count, step));
+      const grid = el('div'); grid.className = 'ed-fields';
+      const lab = edInput('ed-group-label-' + g.id, g.label, null, (v) => applyEdit('group:' + g.id + ':label', (ed) => {
+        ed.groups[g.id] = Object.assign({}, ed.groups[g.id], { label: v.trim() || g.id });
+      }));
+      const ex = document.createElement('fieldset'); ex.className = 'gfield';
+      const lg = document.createElement('legend'); lg.className = 'fl';
+      lg.textContent = 'Exploded offset, ' + units() + (state.up === 'z' ? ' (Z is up)' : ' (Y is up)');
+      const axes = el('div'); axes.className = 'axes';
+      ['x', 'y', 'z'].forEach((axis, ai) => {
+        const ax = document.createElement('label'); ax.className = 'ax';
+        ax.append(el('span', axis.toUpperCase()), numInput('ed-group-ex-' + axis + '-' + g.id, g.explode.getComponent(ai), (v) => {
+          applyEdit('explode:' + g.id + ':' + axis, (ed) => {
+            const cur = state.groups.get(g.id).explode.toArray().map((n) => Math.round(n * 10) / 10);
+            cur[ai] = v;
+            ed.groups[g.id] = Object.assign({}, ed.groups[g.id], { explode: cur });
+          });
+          if (state.mode !== 'exploded') chooseMode('exploded');
+          clearTimeout(refitTimer); refitTimer = setTimeout(refit, 450);
+        }, 'Exploded offset ' + axis.toUpperCase() + ' for ' + g.label));
+        axes.append(ax);
+      });
+      ex.append(lg, axes);
+      const sel = document.createElement('select'); sel.id = 'ed-group-in-' + g.id;
+      sel.append(opt('none', 'Stays', !g.inside || g.inside === 'none'), opt('ghost', 'Ghosted', g.inside === 'ghost'), opt('hide', 'Hidden', g.inside === 'hide'));
+      sel.addEventListener('change', () => {
+        applyEdit(null, (ed) => { ed.groups[g.id] = Object.assign({}, ed.groups[g.id], { inside: sel.value }); });
+        chooseMode('inside');
+      });
+      grid.append(fld('Group name', lab, true), ex, fld('In "See inside" view', sel, true));
+      const row = el('div'); row.className = 'ed-row';
+      const members = el('span', 'Parts: ' + g.parts.map((p) => p.name).join(', ')); members.className = 'meta grow';
+      const alone = g.parts.length === 1 && g.parts[0].id === g.id;
+      row.append(members, edButton('Delete group', () => edStructural((ed) => {
+        g.parts.forEach((p) => setPartEdit(ed, p, 'group', p.id, p.baseGroup));
+        delete ed.groups[g.id];
+      }), { id: 'ed-group-del-' + g.id, disabled: alone, label: 'Delete group ' + g.label }));
+      card.append(top, grid, row);
+      list.append(card);
+    });
+    host.append(list);
+  }
+
+  // ----- Views -----
+  // the view the page opens on
+  function defaultView() {
+    return pageInfo().defaultView || (state.edits.lists.views || (state.manifest.views && state.manifest.views.length) ? viewName(views()[0]) : 'iso');
+  }
+  // camera direction from the model toward the camera, in model axes (what a custom view's dir holds)
+  function cameraDir() {
+    const d = camera.position.clone().sub(controls.target).normalize();
+    return (state.up === 'z' ? [d.x, -d.z, d.y] : [d.x, d.y, d.z]).map((v) => Math.round(v * 100) / 100);
+  }
+  function edViewsSection(host) {
+    const list = views(), names = list.map(viewName), dflt = defaultView();
+    const setViews = (step, next) => applyEdit(step, (ed) => {
+      if (JSON.stringify(next) === JSON.stringify(baseViews())) delete ed.lists.views; else ed.lists.views = next;
+      if (ed.page.defaultView && !next.some((v) => viewName(v) === ed.page.defaultView)) delete ed.page.defaultView;
+    });
+    const wrap = el('div'); wrap.className = 'ed-list';
+    const shownList = el('div'); shownList.className = 'ed-list'; shownList.dataset.sortList = 'views';
+    const hiddenList = el('div'); hiddenList.className = 'ed-list';
+    wrap.append(shownList, hiddenList);
+    const rows = list.map((v, i) => ({ v, i, shown: true }))
+      .concat(Object.keys(STOCK_VIEWS).filter((n) => !names.includes(n)).map((n) => ({ v: n, i: -1, shown: false })));
+    rows.forEach(({ v, i, shown }) => {
+      const n = viewName(v);
+      const card = el('div'); card.className = 'ed-card';
+      const row = el('div'); row.className = 'ed-row';
+      if (shown) {
+        card.dataset.sort = 'views';
+        const grip = 'ed-view-' + n + '-grip';
+        const step = (d) => {
+          if (i + d < 0 || i + d >= list.length) return;
+          edFocusAfter = grip; setViews(null, moveItem(list, i, i + d)); edRender();
+        };
+        row.append(edHandle(grip, viewLabel(v), card, 'views', (l, index) => { setViews(null, moveItem(list, i, index)); edRender(); }, step),
+          ...edMoveButtons('ed-view-' + n, viewLabel(v), i, list.length, step));
+      }
+      if (typeof v === 'string') {
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'ed-view-show-' + n; cb.checked = shown;
+        cb.disabled = shown && list.length === 1;
+        cb.addEventListener('change', () => { setViews(null, cb.checked ? list.concat([n]) : list.filter((x) => x !== n)); edRender(); });
+        const lab = document.createElement('label'); lab.className = 'toggle grow'; lab.append(cb, viewLabel(v));
+        const kind = el('span', shown ? 'Stock view' : 'Hidden'); kind.className = 'meta';
+        row.append(lab, kind);
+      } else {
+        const nm = edInput('ed-view-name-' + i, v.name, 'View name', (val) => {
+          const next = views().slice(); next[i] = Object.assign({}, next[i], { name: val.trim() || 'View' });
+          setViews('view:' + i + ':name', next);
+        });
+        nm.classList.add('grow');
+        const dir = el('span', 'dir ' + (v.dir || []).join(', ')); dir.className = 'meta mono'; dir.id = 'ed-view-dir-' + i;
+        row.append(nm, dir,
+          edButton('Use current camera', () => {
+            const next = views().slice(); next[i] = Object.assign({}, next[i], { dir: cameraDir() });
+            setViews(null, next); edRender();
+          }, { id: 'ed-view-cam-' + i, label: 'Use current camera for ' + v.name }),
+          edButton('Remove', () => { setViews(null, list.filter((_, j) => j !== i)); edRender(); },
+            { id: 'ed-view-rm-' + i, disabled: list.length === 1, label: 'Remove view ' + v.name }));
+      }
+      const rd = document.createElement('input'); rd.type = 'radio'; rd.name = 'ed-default-view'; rd.id = 'ed-view-default-' + n;
+      rd.checked = shown && n === dflt; rd.disabled = !shown;
+      rd.addEventListener('change', () => {
+        applyEdit(null, (ed) => { if (n === (state.manifest.defaultView || '')) delete ed.page.defaultView; else ed.page.defaultView = n; });
+        goView(n);
+      });
+      const rl = document.createElement('label'); rl.className = 'toggle'; rl.append(rd, 'Opens on');
+      row.append(rl);
+      card.append(row); (shown ? shownList : hiddenList).append(card);
+    });
+    wrap.append(edButton('+ Add view from current camera', () => {
+      let k = 1; while (list.some((v) => typeof v === 'object' && slug(v.name) === 'view-' + k)) k++;
+      setViews(null, list.concat([{ name: 'View ' + k, dir: cameraDir() }])); edRender();
+    }, { id: 'ed-view-add', cls: 'add' }));
+    host.append(wrap);
+  }
+
+  // ----- Finishes -----
+  function edFinishesSection(host) {
+    const list = finishes();
+    const setFinishes = (step, next) => applyEdit(step, (ed) => {
+      if (JSON.stringify(next) === JSON.stringify(baseFinishes())) delete ed.lists.finishes; else ed.lists.finishes = next;
+    });
+    const wrap = el('div'); wrap.className = 'ed-list'; wrap.dataset.sortList = 'finishes';
+    list.forEach((f, i) => {
+      const card = el('div'); card.className = 'ed-card'; card.dataset.sort = 'finishes';
+      const row = el('div'); row.className = 'ed-row';
+      const step = (d) => {
+        if (i + d < 0 || i + d >= list.length) return;
+        edFocusAfter = 'ed-finish-' + (i + d) + '-grip'; setFinishes(null, moveItem(finishes(), i, i + d)); edRender();
+      };
+      const drop = (l, index) => { edFocusAfter = 'ed-finish-' + index + '-grip'; setFinishes(null, moveItem(finishes(), i, index)); edRender(); };
+      row.append(edHandle('ed-finish-' + i + '-grip', f.name, card, 'finishes', drop, step));
+      const col = document.createElement('input'); col.type = 'color'; col.className = 'ed-swatch'; col.id = 'ed-finish-color-' + i;
+      col.value = '#' + new THREE.Color(f.color).getHexString(); col.setAttribute('aria-label', 'Colour of ' + f.name);
+      col.addEventListener('input', () => {
+        const cur = finishes()[i], showing = finishHex === String(cur.color).toLowerCase();
+        const next = finishes().slice(); next[i] = Object.assign({}, cur, { color: col.value });
+        setFinishes('finish:' + i + ':color', next);
+        if (showing) pickFinish(col.value);
+      });
+      const nm = edInput('ed-finish-name-' + i, f.name, 'Finish name', (v) => {
+        const next = finishes().slice(); next[i] = Object.assign({}, next[i], { name: v.trim() || 'Finish' });
+        setFinishes('finish:' + i + ':name', next);
+      });
+      nm.classList.add('grow');
+      row.append(col, nm);
+      if (i === 0) { const b = el('span', 'Opens with'); b.className = 'ed-badge'; row.append(b); }
+      else row.append(edButton('Make default', () => {
+        const next = finishes().slice(); next.unshift(next.splice(i, 1)[0]);
+        setFinishes(null, next); edRender();
+      }, { id: 'ed-finish-default-' + i, label: 'Make ' + f.name + ' the default' }));
+      row.append(edButton('Remove', () => {
+        const showing = finishHex === String(f.color).toLowerCase();
+        const next = finishes().filter((_, j) => j !== i);
+        setFinishes(null, next);
+        if (showing) pickFinish(next[0].color);
+        edRender();
+      }, { id: 'ed-finish-rm-' + i, disabled: list.length === 1, label: 'Remove ' + f.name }),
+      ...edMoveButtons('ed-finish-' + i, f.name, i, list.length, step));
+      card.append(row); wrap.append(card);
+    });
+    wrap.append(edButton('+ Add finish', () => {
+      setFinishes(null, finishes().concat([{ name: 'New finish', color: '#888888' }])); edRender();
+    }, { id: 'ed-finish-add', cls: 'add' }));
+    host.append(wrap);
+  }
+
+  // ----- Spec sheet -----
+  function specType(sec) { return sec.rows ? 'rows' : sec.items ? 'items' : 'text'; }
+  function specLines(sec) {
+    const lines = [];
+    (sec.rows || []).forEach((r) => lines.push(r[1] ? r[0] + ': ' + r[1] : String(r[0] || '')));
+    (sec.items || []).forEach((t) => lines.push(String(t)));
+    if (sec.text) String(sec.text).split(/\n+/).forEach((t) => lines.push(t));
+    return lines.filter((l) => l.trim());
+  }
+  // switch a section's type, carrying its text over line by line ("Label: value" for table rows)
+  function specAs(sec, type) {
+    const lines = specLines(sec), out = { title: sec.title || '' };
+    if (type === 'rows') out.rows = lines.length ? lines.map((l) => { const k = l.indexOf(':'); return k > 0 ? [l.slice(0, k).trim(), l.slice(k + 1).trim()] : [l.trim(), '']; }) : [['', '']];
+    else if (type === 'items') out.items = lines.length ? lines : [''];
+    else out.text = lines.join('\n');
+    return out;
+  }
+  function edSpecSection(host) {
+    const setSpec = (step, mutate) => applyEdit(step, (ed) => {
+      const next = JSON.parse(JSON.stringify(specSections()));
+      mutate(next);
+      if (JSON.stringify(next) === JSON.stringify(state.manifest.spec || [])) delete ed.lists.spec; else ed.lists.spec = next;
+    });
+    const structural = (mutate) => { setSpec(null, mutate); edRender(); };
+    const wrap = el('div'); wrap.className = 'ed-list'; wrap.dataset.sortList = 'spec';
+    const total = specSections().length;
+    specSections().forEach((sec, i) => {
+      const card = el('div'); card.className = 'ed-card'; card.dataset.sort = 'spec';
+      const step = (d) => {
+        if (i + d < 0 || i + d >= total) return;
+        edFocusAfter = 'ed-spec-sec-' + (i + d) + '-grip'; structural((l) => moveItem(l, i, i + d).forEach((x, k) => { l[k] = x; }));
+      };
+      const dropSec = (l0, index) => { edFocusAfter = 'ed-spec-sec-' + index + '-grip'; structural((l) => moveItem(l, i, index).forEach((x, k) => { l[k] = x; })); };
+      const head = el('div'); head.className = 'ed-fields';
+      const title = edInput('ed-spec-title-' + i, sec.title || '', null, (v) => setSpec('spec:' + i + ':title', (l) => { l[i].title = v; }));
+      const t = specType(sec);
+      const type = document.createElement('select'); type.id = 'ed-spec-type-' + i;
+      type.append(opt('rows', 'Table rows', t === 'rows'), opt('items', 'Bullets', t === 'items'), opt('text', 'Paragraph', t === 'text'));
+      type.addEventListener('change', () => structural((l) => { l[i] = specAs(l[i], type.value); }));
+      head.append(fld('Section title', title, true), fld('Shown as', type, true));
+      const body = el('div'); body.className = 'ed-list';
+      // a row or bullet j of n in this section: grip that drags within the section or moves with the arrow keys
+      const lineGrip = (kind, key, j, n, line, label) => {
+        const id = 'ed-spec-' + i + '-' + kind + '-' + j + '-grip';
+        const go = (to) => { edFocusAfter = 'ed-spec-' + i + '-' + kind + '-' + to + '-grip'; structural((l) => { l[i][key] = moveItem(l[i][key], j, to); }); };
+        return edHandle(id, label, line, 'spec-' + kind + '-' + i, (l0, index) => go(index), (d) => { if (j + d >= 0 && j + d < n) go(j + d); });
+      };
+      if (t === 'rows') body.dataset.sortList = 'spec-row-' + i;
+      if (t === 'items') body.dataset.sortList = 'spec-bullet-' + i;
+      if (t === 'rows') {
+        const cap = el('div'); cap.className = 'ed-pair'; cap.setAttribute('aria-hidden', 'true');
+        const c1 = el('span', 'Label'), c2 = el('span', 'Value'); c1.className = c2.className = 'fl';
+        cap.append(el('span'), c1, c2); body.append(cap);
+        sec.rows.forEach((r, j) => {
+          const line = el('div'); line.className = 'ed-pair'; line.dataset.sort = 'spec-row-' + i;
+          line.append(
+            lineGrip('row', 'rows', j, sec.rows.length, line, 'row ' + (j + 1)),
+            edInput('ed-spec-' + i + '-label-' + j, r[0], 'Label, row ' + (j + 1), (v) => setSpec('spec:' + i + ':' + j + ':label', (l) => { l[i].rows[j][0] = v; })),
+            edInput('ed-spec-' + i + '-value-' + j, r[1], 'Value, row ' + (j + 1), (v) => setSpec('spec:' + i + ':' + j + ':value', (l) => { l[i].rows[j][1] = v; })),
+            edButton('Remove', () => structural((l) => { l[i].rows.splice(j, 1); }), { id: 'ed-spec-' + i + '-rm-' + j, label: 'Remove row ' + (j + 1) }));
+          body.append(line);
+        });
+        body.append(edButton('+ Add row', () => structural((l) => { l[i].rows.push(['', '']); }), { id: 'ed-spec-' + i + '-add', cls: 'add' }));
+      } else if (t === 'items') {
+        sec.items.forEach((item, j) => {
+          const line = el('div'); line.className = 'ed-one'; line.dataset.sort = 'spec-bullet-' + i;
+          line.append(
+            lineGrip('bullet', 'items', j, sec.items.length, line, 'bullet ' + (j + 1)),
+            edInput('ed-spec-' + i + '-item-' + j, item, 'Bullet ' + (j + 1), (v) => setSpec('spec:' + i + ':' + j + ':item', (l) => { l[i].items[j] = v; })),
+            edButton('Remove', () => structural((l) => { l[i].items.splice(j, 1); }), { id: 'ed-spec-' + i + '-rm-' + j, label: 'Remove bullet ' + (j + 1) }));
+          body.append(line);
+        });
+        body.append(edButton('+ Add bullet', () => structural((l) => { l[i].items.push(''); }), { id: 'ed-spec-' + i + '-add', cls: 'add' }));
+      } else {
+        const ta = document.createElement('textarea'); ta.id = 'ed-spec-text-' + i; ta.value = sec.text || '';
+        ta.addEventListener('input', () => setSpec('spec:' + i + ':text', (l) => { l[i].text = ta.value; }));
+        body.append(fld('Paragraph', ta, true));
+      }
+      const foot = el('div'); foot.className = 'ed-row';
+      const sp = el('span'); sp.className = 'grow';
+      foot.append(edHandle('ed-spec-sec-' + i + '-grip', sec.title || 'section ' + (i + 1), card, 'spec', dropSec, step),
+        ...edMoveButtons('ed-spec-sec-' + i, sec.title || 'section ' + (i + 1), i, total, step), sp, edButton('Remove section', () => structural((l) => { l.splice(i, 1); }), { id: 'ed-spec-rm-' + i, label: 'Remove section ' + (sec.title || i + 1) }));
+      card.append(head, body, foot);
+      wrap.append(card);
+    });
+    const data = el('div'); data.className = 'ed-card';
+    const dr = el('div'); dr.className = 'ed-row';
+    const dt = el('span', 'Model data'); dt.className = 'grow';
+    const dm = el('span', 'Calculated from the model · always last'); dm.className = 'meta';
+    dr.append(dt, dm); data.append(dr); wrap.append(data);
+    wrap.append(edButton('+ Add section', () => structural((l) => { l.push({ title: 'New section', items: [''] }); }), { id: 'ed-spec-add', cls: 'add' }));
+    host.append(wrap);
+  }
+
+  // what differs from the loaded manifest, in words, for the change list and the section counts
+  const INSIDE_LABELS = { none: 'Stays', ghost: 'Ghosted', hide: 'Hidden' };
+  function editChanges() {
+    const ed = state.edits, mf = state.manifest, out = [];
+    const add = (section, text) => out.push({ section, text });
+    const q = (v) => (v === undefined || v === '' ? '(empty)' : '"' + v + '"');
+    const mat = (k) => MAT_LABELS[k] || k;
+    const groupLabel = (gid) => (state.groups.get(gid) || {}).label || (mf.groups && mf.groups[gid] && mf.groups[gid].label) || prettyName(gid);
+    PAGE_FIELDS.forEach(([k, label, dflt]) => {
+      if (k in ed.page && ed.page[k] !== (mf[k] || '')) add('page', label + ': ' + q(mf[k] || dflt) + ' → ' + q(ed.page[k] || dflt));
+    });
+    state.parts.forEach((p) => {
+      const e = ed.parts[p.id];
+      if (!e) return;
+      if (e.name !== undefined && e.name !== p.baseName) add('parts', p.baseName + ' renamed to ' + e.name);
+      if (e.group !== undefined && e.group !== p.baseGroup) add('parts', p.name + ': ' + groupLabel(p.baseGroup) + ' → ' + groupLabel(e.group));
+      if (e.material !== undefined && e.material !== p.baseMat) add('parts', p.name + ': ' + mat(p.baseMat) + ' → ' + mat(e.material));
+    });
+    Object.keys(ed.groups).forEach((gid) => {
+      const g = state.groups.get(gid);
+      if (!g) return; // no parts in it any more
+      const e = ed.groups[gid], base = (mf.groups && mf.groups[gid]) || {};
+      const first = state.parts.find((p) => p.baseGroup === gid);
+      if (!first && !(mf.groups && mf.groups[gid])) { add('groups', 'New group ' + q(g.label)); return; }
+      const baseLabel = base.label || (first && first.id === gid && !first.namedGroup ? first.baseName : prettyName(gid));
+      if (e.label !== undefined && e.label !== baseLabel) add('groups', baseLabel + ' renamed to ' + e.label);
+      if (e.explode) {
+        if (Array.isArray(base.explode)) {
+          const d = ['X', 'Y', 'Z'].map((a, i) => (+base.explode[i] || 0) !== e.explode[i] ? a + ' ' + (+base.explode[i] || 0) + ' → ' + e.explode[i] : '').filter(Boolean);
+          if (d.length) add('groups', g.label + ': explode ' + d.join(', '));
+        } else add('groups', g.label + ': explode set to ' + e.explode.join(', '));
+      }
+      if (e.inside !== undefined && e.inside !== base.inside) add('groups', g.label + ': see inside ' + (INSIDE_LABELS[base.inside] || 'automatic') + ' → ' + INSIDE_LABELS[e.inside]);
+    });
+    if ('up' in ed.page && ed.page.up !== state.baseUp) add('page', 'Up axis: ' + state.baseUp.toUpperCase() + ' → ' + ed.page.up.toUpperCase());
+    state.parts.forEach((p) => {
+      const src = (ed.parts[p.id] || {}).source;
+      if (src) add('parts', p.name + ': source → ' + src.file + (src.kind === 'scad' && definesText(src.defines) ? ' (' + definesText(src.defines) + ')' : ''));
+    });
+    const L = ed.lists;
+    const titleOf = (n) => { const v = views().concat(baseViews()).find((x) => viewName(x) === n); return v ? viewLabel(v) : n; };
+    if (L.views) {
+      const b = baseViews(), bn = b.map(viewName), nn = L.views.map(viewName), before = out.length;
+      L.views.forEach((v) => {
+        const k = bn.indexOf(viewName(v));
+        if (k < 0) add('views', 'View added: ' + viewLabel(v));
+        else if (JSON.stringify(b[k]) !== JSON.stringify(v)) add('views', 'View ' + viewLabel(v) + ': camera changed');
+      });
+      b.forEach((v) => { if (!nn.includes(viewName(v))) add('views', (typeof v === 'string' ? 'View hidden: ' : 'View removed: ') + viewLabel(v)); });
+      if (out.length === before) add('views', 'Views reordered');
+    }
+    if ('defaultView' in ed.page) add('views', 'Opens on: ' + titleOf(state.manifest.defaultView || viewName(baseViews()[0])) + ' → ' + titleOf(ed.page.defaultView));
+    if (L.finishes) {
+      const b = baseFinishes(), bn = b.map((f) => f.name), nn = L.finishes.map((f) => f.name), before = out.length;
+      L.finishes.forEach((f) => {
+        const k = bn.indexOf(f.name);
+        if (k < 0) add('finishes', 'Finish added: ' + f.name);
+        else if (String(b[k].color).toLowerCase() !== String(f.color).toLowerCase()) add('finishes', f.name + ': ' + b[k].color + ' → ' + f.color);
+      });
+      b.forEach((f) => { if (!nn.includes(f.name)) add('finishes', 'Finish removed: ' + f.name); });
+      if (b[0] && L.finishes[0] && b[0].name !== L.finishes[0].name && bn.includes(L.finishes[0].name)) add('finishes', 'Opens with ' + L.finishes[0].name);
+      if (out.length === before) add('finishes', 'Finishes reordered');
+    }
+    if (L.spec) {
+      const b = state.manifest.spec || [], bt = b.map((x) => x.title), nt = L.spec.map((x) => x.title), before = out.length;
+      const name = (t) => t || '(untitled)';
+      const renamed = new Set(); // loaded sections accounted for as renamed
+      L.spec.forEach((x, i) => {
+        const k = bt.indexOf(x.title);
+        if (k >= 0) { if (JSON.stringify(b[k]) !== JSON.stringify(x)) add('spec', 'Section edited: ' + name(x.title)); return; }
+        // a new title in the place of a loaded section whose title is gone: a rename
+        if (b[i] && !nt.includes(b[i].title) && !renamed.has(i)) { renamed.add(i); add('spec', 'Section renamed: ' + name(b[i].title) + ' → ' + name(x.title)); }
+        else add('spec', 'Section added: ' + name(x.title));
+      });
+      b.forEach((x, i) => { if (!nt.includes(x.title) && !renamed.has(i)) add('spec', 'Section removed: ' + name(x.title)); });
+      if (out.length === before) add('spec', 'Sections reordered');
+    }
+    if (L.partOrder) {
+      // compared with the loaded order, grouped as now
+      const nat = naturalLayout(), cur = partLayout();
+      const natG = Array.from(nat.keys()), curG = cur.map((x) => x[0]);
+      if (JSON.stringify(natG) !== JSON.stringify(curG)) add('groups', 'Groups reordered');
+      cur.forEach(([gid, ids]) => {
+        if (JSON.stringify(nat.get(gid) || []) !== JSON.stringify(ids)) add('parts', groupLabel(gid) + ': parts reordered');
+      });
+    }
+    return out;
+  }
   function highlight(p, on) {
     const m = p.mesh.material;
     if (!m.emissive) return;
@@ -1003,7 +2224,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function el(tag, text) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; return e; }
   function renderSheet() {
     const host = $('sheet'); host.textContent = '';
-    (state.manifest.spec || []).forEach((sec) => {
+    specSections().forEach((sec) => {
       const s = el('section'); s.appendChild(el('h2', sec.title || ''));
       if (sec.rows) { const dl = el('dl'); sec.rows.forEach((r) => { dl.appendChild(el('dt', r[0])); dl.appendChild(el('dd', r[1])); }); s.appendChild(dl); }
       if (sec.items) { const ul = el('ul'); sec.items.forEach((i) => ul.appendChild(el('li', i))); s.appendChild(ul); }
@@ -1016,14 +2237,19 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       .forEach((r) => { dl.appendChild(el('dt', r[0])); dl.appendChild(el('dd', r[1])); });
     s.appendChild(dl); host.appendChild(s);
   }
-  function renderPanels() {
-    const mf = state.manifest;
+  function renderHeader() {
+    const mf = pageInfo();
     $('title').textContent = mf.name || (state.parts.length ? 'Loaded model' : '3D Mockup Viewer');
     $('subtitle').textContent = mf.subtitle || '';
     $('subtitle').hidden = !mf.subtitle;
     $('eyebrow').textContent = mf.eyebrow || '3D mockup';
     if (mf.name && !dropIn) document.title = mf.name;
+  }
+  function renderPanels() {
+    renderHeader();
     buildFinishes(); renderParts(); renderSheet();
+    $('edOpen').disabled = !state.parts.length;
+    if ($('editor').open) edRender();
   }
 
   // ---------- loading ----------
@@ -1134,7 +2360,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     window.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) $('drop').hidden = true; });
     window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth = 0; $('drop').hidden = true; loadUserFiles(e.dataTransfer.files); });
     $('foot').textContent += ' Files you load stay in this browser tab and are not uploaded anywhere.';
-    $('arrBox').hidden = false;
+    $('arrBox').hidden = false; $('edBox').hidden = false;
     if (window.mockupScad) $('fileInput').accept += ',.scad';
   }
 
@@ -1154,7 +2380,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     return {
       parts: state.parts.length,
       groups: Array.from(state.groups.values()).map((g) => ({ id: g.id, label: g.label, parts: g.parts.map((p) => p.id) })),
-      size, units: state.units, warnings: warnings.slice()
+      size, units: units(), warnings: warnings.slice()
     };
   }
   let hostBusy = false, changeTimer = null;
@@ -1253,7 +2479,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   let hostQueue = null;
   function startEmbedding(initialLoad) {
     if (!embedOrigins.length) return;
-    $('arrBox').hidden = false;
+    $('arrBox').hidden = false; $('edBox').hidden = false;
     hostQueue = initialLoad.then(() => postToHost('ready', {
       edition: window.mockupScad ? 'openscad' : 'standard',
       viewerVersion: (document.querySelector('meta[name="mockup-viewer-version"]') || {}).content || null,
