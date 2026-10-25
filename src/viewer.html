@@ -236,6 +236,19 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 .ed-handle svg { width: 14px; height: 14px; fill: currentColor; }
 .ed .dragging { opacity: .45; }
 .ed-drop { height: 3px; border-radius: 2px; background: var(--accent); }
+/* Raw JSON: the manifest as text, with checks that explain problems by line */
+.ed-nav .ed-sep { height: 1px; background: var(--line); margin: 8px 4px; }
+.ed .ed-json { font: 12.5px/1.5 var(--font-mono); min-height: 360px; white-space: pre; overflow: auto; tab-size: 2; }
+.ed-checks { display: grid; gap: 8px; }
+.ed-checks ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
+.ed-checks li { display: flex; gap: 8px; align-items: baseline; }
+.ed-checks .mark { font: 12px var(--font-mono); flex: none; width: 1.2em; }
+.ed-checks .ok .mark { color: var(--accent); }
+.ed-checks .bad, .ed-problem { color: var(--warn); }
+.ed-checks .skip { color: var(--muted); }
+.ed-problem { border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); border-radius: 8px; padding: 8px 10px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13.5px; }
+.ed-problem span { flex: 1 1 220px; color: var(--fg); }
+.ed-problem b { color: var(--warn); font-weight: 600; }
 .ed-pair { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr) auto; }
 .ed-one { grid-template-columns: auto minmax(0, 1fr) auto; }
 .ed input[type="text"], .ed select {
@@ -274,12 +287,20 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       <h1 id="title">Loading model</h1>
       <p class="sub" id="subtitle" hidden></p>
     </div>
-    <div class="group" id="openBox" hidden>
-      <button class="btn" id="openBtn" type="button">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/></svg>
-        Load files
-      </button>
-      <input type="file" id="fileInput" multiple accept=".stl,.3mf,.glb,.json" hidden>
+    <div class="group">
+      <div class="group" id="openBox" hidden>
+        <button class="btn" id="openBtn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/></svg>
+          Load files
+        </button>
+        <input type="file" id="fileInput" multiple accept=".stl,.3mf,.glb,.json" hidden>
+      </div>
+      <div class="group" id="edBox" hidden>
+        <button class="btn" type="button" id="edOpen" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/></svg>
+          Edit manifest
+        </button>
+      </div>
     </div>
   </header>
 
@@ -327,10 +348,6 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
           <button class="btn" type="button" id="arrReset" hidden>Reset</button>
           <button class="btn" type="button" id="arrCopy" hidden>Copy manifest</button>
           <button class="btn" type="button" id="arrToggle" aria-pressed="false">Arrange</button>
-          <button class="btn" type="button" id="edOpen" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/></svg>
-            Edit manifest
-          </button>
         </div>
       </div>
       <p class="arr-note" id="arrNote" role="status"></p>
@@ -716,7 +733,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
     state.signature = state.parts.map((p) => p.id).sort().join('|');
     state.edits = loadEdits();
-    if (edHistory.key !== editsKey()) resetHistory();
+    if (edHistory.key !== editsKey()) { resetHistory(); edJson.draft = null; }
     applyUpAxis();
     if (state.edits.lists.finishes || (mf.finishes && mf.finishes.length)) setFinishColor(finishes()[0].color);
     arrange();
@@ -1163,6 +1180,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const mf = state.manifest;
     const out = JSON.parse(JSON.stringify(mf || {}));
     Object.assign(out, JSON.parse(JSON.stringify(state.edits.page)));
+    if (out.defaultView === '') delete out.defaultView; // cleared by Raw JSON: open on the first view
     ['views', 'finishes', 'spec'].forEach((k) => { if (state.edits.lists[k]) out[k] = JSON.parse(JSON.stringify(state.edits.lists[k])); });
     const baseParts = {}; (mf.parts || []).forEach((p) => { baseParts[p.id] = p; });
     out.up = state.up;
@@ -1261,6 +1279,14 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
         'edit titles and text in place. Drag a section, row or bullet by its grip to reorder it (sections also have arrow buttons, and every grip takes the arrow keys). Change a section\'s type with "Shown as"; its text carries over. "Model data" is calculated from the model and can\'t be edited.'],
       render: edSpecSection,
       reset: (ed) => { delete ed.lists.spec; }
+    },
+    {
+      id: 'json', title: 'Raw JSON', sep: true,
+      count: () => (edJson.draft === null ? '' : edJson.problems.length ? edJson.problems.length + (edJson.problems.length === 1 ? ' error' : ' errors') : 'not applied'),
+      help: ['The whole manifest as text: exactly what Copy manifest produces. Useful for pasting a manifest from somewhere else, or for bulk edits.',
+        'edit the text, then press Apply JSON. It is checked as you type and nothing changes until it is valid; each problem says what to fix and on which line. Parts can\'t be added or removed here, because their shapes come from the loaded files.'],
+      render: edJsonSection,
+      reset: () => { edJson.draft = null; }
     }
   ];
   let edSection = 'page';
@@ -1303,6 +1329,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       const c = el('span'); c.className = 'count'; c.id = 'ed-count-' + s.id;
       b.append(el('span', s.title), c);
       b.addEventListener('click', () => { edSection = s.id; edRender(); });
+      if (s.sep) { const sep = el('div'); sep.className = 'ed-sep'; sep.setAttribute('aria-hidden', 'true'); nav.appendChild(sep); }
       nav.appendChild(b);
     });
     const sec = edCurrent();
@@ -1373,6 +1400,237 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     up.addEventListener('change', () => applyEdit(null, (ed) => { if (up.value === state.baseUp) delete ed.page.up; else ed.page.up = up.value; }));
     grid.appendChild(fld('Up axis', up, true));
     host.appendChild(grid);
+  }
+
+  // ----- Raw JSON -----
+  const edJson = { draft: null, problems: [] }; // draft: unapplied text, null while the box shows the current manifest
+  const JSON_CHECKS = ['Valid JSON', 'Page fields', 'Every loaded part listed once, and no others', 'Materials and colours', 'Groups', 'Views', 'Spec sheet'];
+  const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+  const isHex = (v) => typeof v === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
+  // Check manifest text. Returns {manifest, problems: [{line, text}], checks: [{label, state: ok|bad|skip}]}.
+  function checkManifestJson(text) {
+    const problems = [], bad = new Set();
+    // line of the last step found, searching each step after the previous one (strings or patterns)
+    const lineOf = (...steps) => {
+      let at = 0;
+      for (const st of steps) {
+        let k;
+        if (typeof st === 'string') k = text.indexOf(st, at);
+        else { const r = new RegExp(st.source, 'g'); r.lastIndex = at; const m = r.exec(text); k = m ? m.index : -1; }
+        if (k < 0) break;
+        at = k;
+      }
+      return text.slice(0, at).split('\n').length;
+    };
+    const esc = (v) => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const idAt = (id) => lineOf('"parts"', new RegExp('"id"\\s*:\\s*"' + esc(id) + '"'));
+    const fail = (check, line, msg) => { bad.add(check); problems.push({ line, text: msg }); };
+    const result = (M) => ({ manifest: M, problems: problems.sort((x, y) => (x.line || 0) - (y.line || 0)), checks: JSON_CHECKS.map((label, i) => ({ label, state: !M && i > 0 ? 'skip' : bad.has(i) ? 'bad' : 'ok' })) });
+    let M;
+    try { M = JSON.parse(text); } catch (e) {
+      const msg = String(e && e.message ? e.message : e);
+      const lc = /line (\d+)/.exec(msg), pos = /position (\d+)/.exec(msg);
+      const line = lc ? +lc[1] : pos ? text.slice(0, +pos[1]).split('\n').length : null;
+      fail(0, line, 'This isn\'t valid JSON (' + msg + '). Look for a missing comma, quote or bracket' + (line ? ' on or just before this line.' : '.'));
+      return result(null);
+    }
+    if (!M || typeof M !== 'object' || Array.isArray(M)) { fail(0, 1, 'The manifest must be one object, { … }, with "parts" and the other fields inside it.'); return result(null); }
+
+    // page fields
+    if ('up' in M && M.up !== 'z' && M.up !== 'y') fail(1, lineOf('"up"'), '"up" must be "z" (OpenSCAD) or "y" (most GLB files).');
+    ['name', 'subtitle', 'eyebrow', 'units'].forEach((k) => { if (k in M && typeof M[k] !== 'string') fail(1, lineOf('"' + k + '"'), '"' + k + '" must be text in quotes.'); });
+
+    // parts
+    const loaded = state.parts.map((p) => p.id);
+    if (!Array.isArray(M.parts)) fail(2, lineOf('"parts"'), '"parts" must be a list, [ … ], with one entry for each loaded part.');
+    else {
+      const seen = new Set();
+      M.parts.forEach((mp, k) => {
+        if (!mp || typeof mp !== 'object' || typeof mp.id !== 'string') { fail(2, lineOf('"parts"'), 'Part ' + (k + 1) + ' has no "id". Every part needs the id it was loaded with.'); return; }
+        const line = idAt(mp.id);
+        if (seen.has(mp.id)) fail(2, line, 'Part "' + mp.id + '" is listed twice. List each part once.');
+        seen.add(mp.id);
+        const p = state.parts.find((q) => q.id === mp.id);
+        if (!p) fail(2, line, 'There is no loaded part "' + mp.id + '". Parts can\'t be added here, because their shapes come from the loaded files. Check the spelling, or remove it. Loaded ids: ' + loaded.join(', ') + '.');
+        if ('name' in mp && typeof mp.name !== 'string') fail(2, line, 'Part "' + mp.id + '": "name" must be text.');
+        if ('file' in mp && typeof mp.file !== 'string') fail(2, line, 'Part "' + mp.id + '": "file" must be text, like "lid.stl".');
+        if ('scad' in mp && (!mp.scad || typeof mp.scad.file !== 'string' || ('defines' in mp.scad && (typeof mp.scad.defines !== 'object' || Array.isArray(mp.scad.defines)))))
+          fail(2, line, 'Part "' + mp.id + '": "scad" needs a "file", and optional "defines", like { "file": "case.scad", "defines": { "part": "lid" } }.');
+        if ('group' in mp && typeof mp.group !== 'string') fail(4, line, 'Part "' + mp.id + '": "group" must be a group id in quotes.');
+        if ('material' in mp) {
+          const m = mp.material;
+          const ok = typeof m === 'string' && (PRESETS[m] || /^#?[0-9a-f]{6}$/i.test(m) || (m === 'keep' && p && p.origMaterial));
+          if (!ok) fail(3, line, m === 'keep' ? 'Part "' + mp.id + '": "keep" only works for a GLB part that has its own material.'
+            : 'Part "' + mp.id + '": the material ' + JSON.stringify(m) + ' isn\'t known. Use one of ' + Object.keys(PRESETS).join(', ') + ', or a colour like "#3a3e41".');
+        }
+      });
+      loaded.filter((id) => !seen.has(id)).forEach((id) => fail(2, lineOf('"parts"'), 'Loaded part "' + id + '" is missing. Parts can\'t be removed here; put it back. (To hide it, untick it in the parts list.)'));
+    }
+
+    // groups
+    if ('groups' in M && (!M.groups || typeof M.groups !== 'object' || Array.isArray(M.groups))) fail(4, lineOf('"groups"'), '"groups" must be an object, { "lid": { … }, … }, keyed by group id.');
+    else Object.keys(M.groups || {}).forEach((gid) => {
+      const g = M.groups[gid];
+      const line = (key) => lineOf('"groups"', '"' + gid + '"', key ? '"' + key + '"' : '"' + gid + '"');
+      if (!g || typeof g !== 'object' || Array.isArray(g)) { fail(4, line(), 'Group "' + gid + '" must be an object, like { "label": "Lid", "explode": [0, 0, 48] }.'); return; }
+      if ('label' in g && typeof g.label !== 'string') fail(4, line('label'), 'Group "' + gid + '": "label" must be text.');
+      if ('explode' in g && !(Array.isArray(g.explode) && g.explode.length === 3 && g.explode.every(isNum)))
+        fail(4, line('explode'), 'Group "' + gid + '": "explode" needs 3 numbers, X, Y and Z in model units, for example [0, 0, 48].');
+      if ('inside' in g && !['hide', 'ghost', 'none'].includes(g.inside)) fail(4, line('inside'), 'Group "' + gid + '": "inside" must be "hide", "ghost" or "none".');
+    });
+
+    // finishes
+    if ('finishes' in M) {
+      if (!Array.isArray(M.finishes)) fail(3, lineOf('"finishes"'), '"finishes" must be a list of { "name": …, "color": "#rrggbb" }.');
+      else M.finishes.forEach((f, k) => {
+        if (!f || typeof f.name !== 'string') fail(3, lineOf('"finishes"'), 'Finish ' + (k + 1) + ' needs a "name".');
+        else if (!isHex(f.color)) fail(3, lineOf('"finishes"', '"' + f.name + '"'), 'Finish "' + f.name + '": "color" must be a colour like "#3a3e41".');
+      });
+    }
+
+    // views
+    const viewNames = [];
+    if ('views' in M) {
+      if (!Array.isArray(M.views)) fail(5, lineOf('"views"'), '"views" must be a list, like ["front", "top", "iso"].');
+      else M.views.forEach((v, k) => {
+        if (typeof v === 'string') {
+          if (!STOCK_VIEWS[v]) fail(5, lineOf('"views"', '"' + v + '"'), 'View "' + v + '" isn\'t a stock view. Stock views are ' + Object.keys(STOCK_VIEWS).join(', ') + '; for your own angle use { "name": "…", "dir": [x, y, z] }.');
+          else viewNames.push(v);
+        } else if (!v || typeof v.name !== 'string' || !(Array.isArray(v.dir) && v.dir.length === 3 && v.dir.every(isNum)))
+          fail(5, lineOf('"views"'), 'View ' + (k + 1) + ' needs a "name" and a "dir" of 3 numbers, like { "name": "Port side", "dir": [-1, -0.3, 0.4] }.');
+        else viewNames.push(slug(v.name));
+      });
+    }
+    if ('defaultView' in M) {
+      const names = 'views' in M ? viewNames : (state.manifest.views && state.manifest.views.length ? state.manifest.views : DEFAULT_VIEWS).map(viewName);
+      if (typeof M.defaultView !== 'string' || (M.defaultView && !names.includes(M.defaultView)))
+        fail(5, lineOf('"defaultView"'), '"defaultView" must name one of the views: ' + names.join(', ') + ' (custom views by their name in lower case, with dashes for spaces).');
+    }
+
+    // spec sheet
+    if ('spec' in M) {
+      if (!Array.isArray(M.spec)) fail(6, lineOf('"spec"'), '"spec" must be a list of sections, like [{ "title": "Size", "rows": [["Outside", "70 × 50 mm"]] }].');
+      else M.spec.forEach((sec, k) => {
+        const where = 'Spec section ' + (k + 1) + (sec && typeof sec.title === 'string' ? ' ("' + sec.title + '")' : '');
+        const line = lineOf('"spec"', sec && typeof sec.title === 'string' ? '"' + sec.title + '"' : '"spec"');
+        if (!sec || typeof sec !== 'object' || Array.isArray(sec)) { fail(6, line, where + ' must be an object with a "title" and "rows", "items" or "text".'); return; }
+        if ('title' in sec && typeof sec.title !== 'string') fail(6, line, where + ': "title" must be text.');
+        if ('rows' in sec && !(Array.isArray(sec.rows) && sec.rows.every((r) => Array.isArray(r) && r.length === 2)))
+          fail(6, line, where + ': "rows" must be a list of [label, value] pairs.');
+        if ('items' in sec && !(Array.isArray(sec.items) && sec.items.every((t) => typeof t === 'string'))) fail(6, line, where + ': "items" must be a list of text.');
+        if ('text' in sec && typeof sec.text !== 'string') fail(6, line, where + ': "text" must be text.');
+      });
+    }
+    return result(M);
+  }
+
+  // edits that make the current manifest match M (M has passed the checks)
+  function editsFromManifest(M) {
+    const base = state.manifest, ed = { parts: {}, groups: {}, page: {}, lists: {} };
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    // page fields, and any other top-level field (kept as given)
+    Object.keys(M).forEach((k) => {
+      if (['parts', 'groups', 'views', 'finishes', 'spec'].includes(k)) return;
+      if (k === 'up') { if (M.up !== state.baseUp) ed.page.up = M.up; return; }
+      if (!same(M[k], base[k])) ed.page[k] = M[k];
+    });
+    ['name', 'subtitle', 'eyebrow', 'units', 'defaultView'].forEach((k) => { if (!(k in M) && base[k] !== undefined) ed.page[k] = ''; });
+    const views = M.views && M.views.length ? M.views : DEFAULT_VIEWS;
+    if (!same(views, baseViews())) ed.lists.views = views;
+    const fin = M.finishes && M.finishes.length ? M.finishes : DEFAULT_FINISHES;
+    if (!same(fin, baseFinishes())) ed.lists.finishes = fin;
+    if (!same(M.spec || [], base.spec || [])) ed.lists.spec = M.spec || [];
+    M.parts.forEach((mp) => {
+      const p = state.parts.find((q) => q.id === mp.id);
+      setPartEdit(ed, p, 'name', mp.name || p.baseName, p.baseName);
+      setPartEdit(ed, p, 'group', mp.group || p.id, p.baseGroup);
+      setPartEdit(ed, p, 'material', mp.material || p.baseMat, p.baseMat);
+      const src = mp.scad ? { kind: 'scad', file: mp.scad.file, defines: mp.scad.defines || {} } : mp.file ? { kind: 'file', file: mp.file } : null;
+      if (src) setPartEdit(ed, p, 'source', src, baseSource(p));
+    });
+    const order = M.parts.map((x) => x.id);
+    if (!same(order, state.parts.map((p) => p.id))) ed.lists.partOrder = order;
+    Object.keys(M.groups || {}).forEach((gid) => {
+      const g = M.groups[gid], b = (base.groups && base.groups[gid]) || {}, cur = state.groups.get(gid), e = {};
+      if (g.label !== undefined && g.label !== b.label && !(cur && b.label === undefined && cur.label === g.label)) e.label = g.label;
+      // a calculated offset or see-inside default written out by Copy manifest isn't a change
+      const autoEx = cur && cur.autoExplode && same(g.explode, cur.explode.toArray().map((n) => Math.round(n * 10) / 10));
+      if (Array.isArray(g.explode) && !same(g.explode, b.explode) && !autoEx) e.explode = g.explode;
+      const autoIn = cur && b.inside === undefined && (cur.inside || 'none') === g.inside;
+      if (g.inside !== undefined && g.inside !== b.inside && !autoIn) e.inside = g.inside;
+      if (Object.keys(e).length) ed.groups[gid] = e;
+    });
+    return ed;
+  }
+
+  function goToLine(ta, n) {
+    const lines = ta.value.split('\n'), start = lines.slice(0, n - 1).reduce((a, l) => a + l.length + 1, 0);
+    ta.focus();
+    ta.setSelectionRange(start, start + (lines[n - 1] || '').length);
+    const lh = parseFloat(getComputedStyle(ta).lineHeight) || 18;
+    ta.scrollTop = Math.max(0, (n - 4) * lh);
+  }
+  function drawJsonChecks(host, res, ta) {
+    host.textContent = '';
+    res.problems.forEach((pr) => {
+      const box = el('div'); box.className = 'ed-problem';
+      const t = el('span');
+      if (pr.line) t.append(el('b', 'Line ' + pr.line + ': '));
+      t.append(pr.text);
+      box.append(t);
+      if (pr.line) box.append(edButton('Go to line ' + pr.line, () => goToLine(ta, pr.line)));
+      host.append(box);
+    });
+    const ul = el('ul');
+    res.checks.forEach((c) => {
+      const li = el('li'); li.className = c.state;
+      const mark = el('span', c.state === 'ok' ? '✓' : c.state === 'bad' ? '✗' : '–'); mark.className = 'mark'; mark.setAttribute('aria-hidden', 'true');
+      li.append(mark, el('span', c.label + (c.state === 'ok' ? '' : c.state === 'bad' ? ': see above' : ' (checked once the JSON is valid)')));
+      ul.append(li);
+    });
+    const title = el('span', 'Checks'); title.className = 'fl';
+    host.append(title, ul);
+  }
+  function edJsonSection(host) {
+    const current = () => JSON.stringify(currentManifest(), null, 2);
+    const ta = document.createElement('textarea'); ta.id = 'ed-json'; ta.className = 'ed-json';
+    ta.spellcheck = false; ta.setAttribute('wrap', 'off'); ta.setAttribute('aria-label', 'Manifest JSON'); ta.setAttribute('aria-describedby', 'ed-json-checks');
+    ta.value = edJson.draft !== null ? edJson.draft : current();
+    const note = el('p'); note.id = 'ed-json-note'; note.className = 'ed-err'; note.setAttribute('role', 'status');
+    const checks = el('div'); checks.className = 'ed-checks'; checks.id = 'ed-json-checks';
+    const apply = edButton('Apply JSON', () => {
+      const res = checkManifestJson(ta.value);
+      if (res.problems.length) return;
+      const next = editsFromManifest(res.manifest);
+      applyEdit(null, (ed) => { EDIT_KEYS.forEach((k) => { ed[k] = next[k]; }); });
+      edJson.draft = null;
+      edRender();
+      $('ed-json-note').textContent = 'Applied. The model and every section now match the JSON.';
+    }, { id: 'ed-json-apply', cls: 'primary' });
+    const refresh = () => {
+      const res = checkManifestJson(ta.value);
+      edJson.problems = res.problems;
+      drawJsonChecks(checks, res, ta);
+      apply.disabled = !!res.problems.length || edJson.draft === null;
+      edChanged();
+    };
+    const changed = () => { edJson.draft = ta.value === current() ? null : ta.value; refresh(); };
+    const setText = (v, msg) => { ta.value = v; changed(); note.textContent = msg || ''; };
+    ta.addEventListener('input', () => { note.textContent = ''; changed(); });
+    const bar = el('div'); bar.className = 'ed-row';
+    const sp = el('span'); sp.className = 'grow';
+    bar.append(
+      edButton('Format', () => {
+        try { setText(JSON.stringify(JSON.parse(ta.value), null, 2)); } catch (e) { note.textContent = 'Fix the JSON problems below first, then format.'; }
+      }, { id: 'ed-json-format' }),
+      edButton('Paste manifest', async () => {
+        try { setText(await navigator.clipboard.readText(), 'Pasted. Check it, then press Apply JSON.'); }
+        catch (e) { note.textContent = 'Paste is blocked here. Click in the box, select all, and paste with Ctrl+V (Cmd+V on a Mac).'; ta.focus(); }
+      }, { id: 'ed-json-paste' }),
+      edButton('Revert to current', () => setText(current(), 'Back to the current manifest.'), { id: 'ed-json-revert' }),
+      sp, apply);
+    host.append(bar, ta, note, checks);
+    refresh();
   }
 
   // ----- reordering: drag handles (mouse, touch and pen), arrow keys on the handle, and up/down buttons -----
@@ -2102,7 +2360,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     window.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) $('drop').hidden = true; });
     window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth = 0; $('drop').hidden = true; loadUserFiles(e.dataTransfer.files); });
     $('foot').textContent += ' Files you load stay in this browser tab and are not uploaded anywhere.';
-    $('arrBox').hidden = false;
+    $('arrBox').hidden = false; $('edBox').hidden = false;
     if (window.mockupScad) $('fileInput').accept += ',.scad';
   }
 
@@ -2221,7 +2479,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   let hostQueue = null;
   function startEmbedding(initialLoad) {
     if (!embedOrigins.length) return;
-    $('arrBox').hidden = false;
+    $('arrBox').hidden = false; $('edBox').hidden = false;
     hostQueue = initialLoad.then(() => postToHost('ready', {
       edition: window.mockupScad ? 'openscad' : 'standard',
       viewerVersion: (document.querySelector('meta[name="mockup-viewer-version"]') || {}).content || null,

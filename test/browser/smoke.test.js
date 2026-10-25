@@ -385,11 +385,81 @@ test('manifest editor: reorder by keyboard, buttons and drag', async () => {
   }
 });
 
+test('manifest editor: Raw JSON checks, applies and undoes', async () => {
+  const { ctx, page, errors } = await openDemo(VIEWPORTS[0], 'light', { permissions: ['clipboard-read', 'clipboard-write'] });
+  try {
+    assert.equal(await page.locator('header #edOpen').count(), 1, 'Edit manifest sits in the header, beside Load files');
+    await page.click('#edOpen');
+    await page.click('#ed-nav-json');
+    const text = await page.inputValue('#ed-json');
+    const mf = JSON.parse(text);
+    assert.equal(mf.name, 'ESP32 Sensor Box', 'the box starts with the current manifest');
+    assert.ok(await page.locator('#ed-json-apply').isDisabled(), 'nothing to apply yet');
+
+    // not JSON: one problem with a line, Go to line selects it
+    await page.fill('#ed-json', text.replace('"up": "z",', '"up": "z"'));
+    const problem = await page.locator('.ed-problem').first().textContent();
+    assert.match(problem, /^Line \d+: This isn't valid JSON/);
+    assert.ok(await page.locator('#ed-json-apply').isDisabled());
+    assert.match(await page.textContent('#ed-count-json'), /^1 error/);
+    await page.locator('.ed-problem button').first().click();
+    assert.ok(await page.evaluate(() => { const t = document.getElementById('ed-json'); return document.activeElement === t && t.selectionEnd > t.selectionStart; }), 'Go to line selects the line');
+
+    // valid JSON with mistakes the checks explain
+    const bad = JSON.parse(text);
+    bad.groups.lid.explode = [0, 48];
+    bad.parts.push({ id: 'antenna' });
+    bad.parts = bad.parts.filter((p) => p.id !== 'leds');
+    bad.parts.find((p) => p.id === 'rj45').material = 'chrome';
+    await page.fill('#ed-json', JSON.stringify(bad, null, 2));
+    const problems = await page.$$eval('.ed-problem span', (l) => l.map((x) => x.textContent));
+    assert.ok(problems.some((t) => /no loaded part "antenna"/.test(t)), 'unknown part explained');
+    assert.ok(problems.some((t) => /Loaded part "leds" is missing/.test(t)), 'missing part explained');
+    assert.ok(problems.some((t) => /material "chrome" isn't known/.test(t)), 'bad material explained');
+    assert.ok(problems.some((t) => /^Line \d+: Group "lid": "explode" needs 3 numbers/.test(t)), 'bad offset explained with its line');
+    await page.screenshot({ path: path.join(SHOTS, 'editor-json-desktop-light.png') });
+    assert.ok(await page.locator('#ed-json-apply').isDisabled());
+
+    // a good edit applies in one step
+    const good = JSON.parse(text);
+    good.name = 'From JSON';
+    good.groups.lid.explode = [0, 0, 60];
+    good.finishes.reverse();
+    good.parts.find((p) => p.id === 'rj45').material = 'brass';
+    await page.fill('#ed-json', JSON.stringify(good, null, 2));
+    assert.equal(await page.locator('.ed-problem').count(), 0);
+    assert.equal(await page.textContent('#ed-count-json'), 'not applied');
+    await page.click('#ed-json-apply');
+    assert.equal(await page.textContent('#title'), 'From JSON');
+    assert.equal(await page.textContent('#ed-json-note'), 'Applied. The model and every section now match the JSON.');
+    assert.deepEqual(await changeList(page), ['Title: "ESP32 Sensor Box" → "From JSON"', 'RJ45 jack: Metal → Brass', 'Lid: explode Z 44 → 60', 'Opens with Slate blue']);
+    assert.deepEqual(JSON.parse(await page.inputValue('#ed-json')).groups.lid.explode, [0, 0, 60], 'the box shows the result');
+    await page.click('#edUndo');
+    assert.equal(await page.textContent('#title'), 'ESP32 Sensor Box', 'one Undo reverts the whole Apply');
+
+    // the current manifest applied unchanged is not a change; paste and revert
+    await page.click('#ed-json-revert');
+    assert.ok(await page.locator('#ed-json-apply').isDisabled());
+    await page.evaluate((t) => navigator.clipboard.writeText(t), JSON.stringify(good));
+    await page.click('#ed-json-paste');
+    await page.waitForFunction(() => /^Pasted/.test(document.getElementById('ed-json-note').textContent));
+    assert.equal(await page.inputValue('#ed-json'), JSON.stringify(good));
+    await page.click('#ed-json-format');
+    assert.equal(await page.inputValue('#ed-json'), JSON.stringify(good, null, 2));
+    await page.click('#ed-json-revert');
+    assert.deepEqual(JSON.parse(await page.inputValue('#ed-json')).name, 'ESP32 Sensor Box');
+    assert.equal(await page.textContent('#ed-count-json'), '');
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
 test('manifest editor: sections fit a phone (dark)', async () => {
   const { ctx, page, errors } = await openDemo(VIEWPORTS[1], 'dark');
   try {
     await page.click('#edOpen');
-    for (const id of ['parts', 'groups', 'views', 'finishes', 'spec']) {
+    for (const id of ['parts', 'groups', 'views', 'finishes', 'spec', 'json']) {
       await page.click('#ed-nav-' + id);
       if (id === 'parts') await page.click('#ed-part-edit-lid');
       const over = await page.evaluate(() => {

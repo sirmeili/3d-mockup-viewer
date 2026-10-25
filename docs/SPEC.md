@@ -169,7 +169,7 @@ Each new load replaces the current model. If a load produces no parts, the stage
 ## 6. Viewer behaviour
 
 ### 6.1 Page layout
-One column, max 1080 px: header (eyebrow, title, subtitle, Load files button on drop-in pages), the stage (16:10, at least 320 px tall, at most 72 % of the viewport height), the control strip, a warning line, then the Parts panel beside the spec sheet (stacked below 760 px), and a footer note about units and axes. The OpenSCAD panel, when present, sits above the Parts panel.
+One column, max 1080 px: header (eyebrow, title, subtitle, and on drop-in pages the **Load files** and **Edit manifest** buttons; embedded viewers show Edit manifest too), the stage (16:10, at least 320 px tall, at most 72 % of the viewport height), the control strip, a warning line, then the Parts panel beside the spec sheet (stacked below 760 px), and a footer note about units and axes. The OpenSCAD panel, when present, sits above the Parts panel.
 
 ### 6.2 Scene and camera
 - The assembly is centred on its bounding box. Z-up models are rotated so Z points up on screen. When the manifest doesn't set `up`, a model is treated as Y-up only when every file is GLB.
@@ -208,14 +208,17 @@ Available on drop-in pages, and on any page while it is embedded. **Arrange** tu
 - Every part, listed group by group in the shown order (a viewer orders groups by their first part, so this also keeps the group order on reload): `id`, `name`, `group`, `material`, and its source: `file`, or `scad` in the OpenSCAD edition, or the source set in the editor (a part file replaces `scad`; an OpenSCAD source sets `scad: { file, defines }`).
 - Every group that has parts, in the shown order: `label`, `explode` rounded to 0.1, `inside` unless `none`.
 - `views`, `finishes` and `spec` as edited; otherwise as loaded.
+- Any other top-level field as loaded, or as set in Raw JSON. A `defaultView` cleared in Raw JSON is left out.
 
 ### 6.10 Spec sheet
 One section per `spec` entry (definition list for `rows`, bullets for `items`, a paragraph for `text`), then a computed "Model data" section: overall size, part count, group count, triangle count.
 
 ### 6.11 Manifest editor
-**Edit manifest**, beside Arrange (same pages: drop-in and embedded; disabled until a model is loaded), opens a modal dialog (planned item 4, being built in phases; this describes what exists).
+**Edit manifest**, in the header beside Load files (on the same pages as Arrange: drop-in and embedded; disabled until a model is loaded), opens a modal dialog that edits everything a manifest can hold. Arrange stays as the quick inline tool; both edit the same data (6.12).
+- **Design:** the "Mockup Viewer Roadmap Screens" canvas (https://claude.ai/artifact/VsKyA5omGhSTWbQmZJa6Qr), artboards "Editor: Parts & groups", "Editor: Spec sheet", "Editor: Views & finishes", "Editor: Raw JSON with validation" and "Manifest editor on a phone". The canvas uses the old TODO numbers. Where they differ, this section wins: its main-viewer Save menu (saving through `mockup serve --writable`) is superseded by planned item 3; the Raw JSON box has no line-number gutter (problems name their line and Go to line selects it); there is no separate "New group" button.
+- **Decisions (2026-10-24):** the live preview is the viewer's own 3D stage, not a second 3D view (browsers cap live WebGL contexts, and one renderer stays in step by definition); part ids are read-only, because they name default files and key remembered edits; there is no "Add part from file" (a possible later enhancement); the footer has Copy manifest only until Save (planned item 3) exists; spec rows and bullets have a grip but no Move up / Move down buttons, to keep phone rows readable.
 - **Layout:** a header (title, model name and part count, close button), a section list, the section being edited, a side panel, and a footer. On screens wider than 760 px the side panel holds the live preview, which is the viewer's own 3D stage moved into the dialog while it is open and moved back on close, and the change list. At 760 px and below the dialog fills the screen, the section list becomes a row of tabs, and the side panel is left out.
-- **Sections:** each starts with a plain-language box saying what it controls and "How to use". The section list shows each section's item count and how many changes it has. Text fields apply as you type; adding, removing or switching something redraws the section.
+- **Sections:** Page, Parts, Groups, Views, Finishes, Spec sheet, and (after a divider) Raw JSON. Each starts with a plain-language box saying what it controls and "How to use". The section list shows each section's item count and how many changes it has. Text fields apply as you type; adding, removing or switching something redraws the section.
   - **Page:** title (`name`), subtitle, eyebrow, units, and the up axis (Z or Y). Changing the axis turns the model in place and refits the camera.
   - **Parts:** one card per part, under its group, with its colour dot, name, material and source. **Edit** opens one card at a time: name, id (read-only), group (including "New group…"), material (presets, "From file" for GLB, or a custom colour), and source: a part file, or an OpenSCAD file with defines written as `name = value` pairs (`part = "lid", wall = 3`). A source with no file name or unreadable defines is explained under the fields and not applied. A new source changes the manifest only; the model keeps the shapes already loaded. Hovering a card highlights the part.
   - **Groups:** one card per group: name, exploded offset (X, Y, Z; editing it switches to Exploded), see-inside behaviour (switches to See inside), the parts in it, and **Delete group**, which moves its parts into groups of their own (disabled for a part that is already alone). New groups come from a part's "New group…".
@@ -223,13 +226,15 @@ One section per `spec` entry (definition list for `rows`, bullets for `items`, a
   - **Finishes:** each swatch's colour picker and name, **Make default** (moves it to the front; the first is marked "Opens with"), **Remove** (not the last one), and **Add finish**. Editing the colour that is showing recolours the model.
   - **Spec sheet:** each section's title and type ("Shown as": table rows, bullets or paragraph), its rows (label and value), bullets or paragraph text, with add and remove, and **Remove section**. Switching type carries the text over line by line ("Label: value" lines become rows). "Model data" is listed as calculated and always last. **Add section** appends one with an empty bullet.
   - **Reordering:** everything with an order has a grip: parts (within a group, or dropped into another group), groups, listed views, finishes, spec sections, and the rows or bullets of a spec section. Dragging works with a mouse, touch or pen (pointer events; the grip has `touch-action: none`): the item dims, a line shows where it will land, and the section scrolls when the pointer nears its top or bottom edge. Every grip also takes the up and down arrow keys, and part, group, view, finish and spec-section cards have Move up / Move down buttons as well. After a move, focus returns to the moved item's grip.
+  - **Raw JSON:** the whole current manifest as text (exactly what Copy manifest produces), with **Format**, **Paste manifest** (from the clipboard; where reading it is blocked, the note says to paste with Ctrl+V), **Revert to current** and **Apply JSON**. The text is checked as you type: valid JSON (with the line from the browser's error), page fields, every loaded part listed once and no others, materials and finish colours, groups (`explode` of 3 numbers, `inside` values), views (stock names, or `name` plus a 3-number `dir`; `defaultView` names one of them) and the spec sheet. Each problem is explained in words with its line number and a **Go to line** button that selects the line; problems are listed in line order, and a list of the checks shows which pass. Apply is disabled until there are no problems and the text differs from the current manifest; the section list shows "N errors" or "not applied" while a draft is pending. **Apply JSON** turns the text into edits on top of the loaded manifest as one undo step, after which every section and the model match it. Values the viewer calculates and Copy manifest writes out (automatic explode offsets, the see-inside default, derived group names) aren't treated as changes. Parts can't be added or removed, because their shapes come from the loaded files. An unapplied draft is kept while switching sections and closing the dialog, until Apply, Revert, Reset section, or a new model.
 - **Change list:** every difference from the loaded manifest, in words ("Lid renamed to Top cover", "Lid: explode Z 44 → 48", "Units: "mm" → "in"", "View hidden: Rear", "Opens on: 3/4 → Top", "Slate blue: #4d6b8c → #112233", "Section renamed: Size and fit → Dimensions"), covering every kind of edit, Arrange's included. Order changes read "Groups reordered" and "<group>: parts reordered", compared with the loaded order. List changes are described by name: views, finishes and spec sections that keep their name are compared, others show as added, removed or renamed, and a list whose only change is order shows as reordered. **Reset all** clears every edit.
 - **Footer:** Undo and Redo, the change count, **Reset section** (for Groups it also resets the order, which lives in the part order; for Parts it resets part edits and the order), **Copy manifest** (same output as Arrange's) and **Done**. Esc and the close button also close the dialog. Save comes with planned item 3.
 - Native `<dialog>` with `showModal()`: the rest of the page is inert while it is open, Esc closes it, and focus returns to the Edit manifest button.
 
 ### 6.12 Edits, memory and undo
 - Arrange and the manifest editor share one set of edits layered on the loaded manifest:
-  `{ parts: {id: {name, group, material, source}}, groups: {id: {label, explode, inside}}, page: {name, subtitle, eyebrow, units, up, defaultView}, lists: {views, finishes, spec, partOrder} }`.
+  `{ parts: {id: {name, group, material, source}}, groups: {id: {label, explode, inside}}, page: {name, subtitle, eyebrow, units, up, defaultView, …}, lists: {views, finishes, spec, partOrder} }`.
+  `page` can also hold other top-level fields set in Raw JSON; they are written to the manifest as given.
   A part's `source` is `{ kind: 'file', file }` or `{ kind: 'scad', file, defines }`. A list edit holds the whole edited list. `partOrder` is every part id in the shown order, flattened group by group; parts it doesn't name (none, normally) keep their loaded order after it. Groups have no order of their own: they follow their first part, so moving a group moves its parts in `partOrder`. The loaded manifest itself is never changed; "the current manifest" (6.9) is the two combined.
 - An edit that brings a value back to the loaded one removes it (a part field, a page field, a whole list, the part order), so the change list and the remembered edits stay minimal. Group names (in Arrange and the editor), and Arrange's part fields, still store a value even when it matches; the change list ignores those.
 - Edits are remembered in `localStorage` under `mockupEdits:<manifest name>:<sorted part ids>`, and removed when empty. Edits saved before the `page` and `lists` keys existed still load.
@@ -333,7 +338,7 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 - `npm test` (Node, about 2 seconds): builds the sample from OpenSCAD; builds the OpenSCAD edition with embedded sources; `text()` with the bundled fonts; OpenSCAD literals; ASCII-to-binary STL; the empty viewer's null data tag; embed origins in the page.
 - `npm run test:browser` (Playwright, about 6 minutes; needs a build and Chromium):
   - Every dist page (demo, OpenSCAD demo, URL mode in both editions) at 1200 px and 400 px, light and dark. Checks: title, no warnings, no horizontal scroll, the canvas is actually drawn (distinct-colour count), exploded and see-inside views, a section cut, Arrange showing one box per group with visible labels, no console errors. On the OpenSCAD demo at desktop/light, a value change and a full re-render.
-  - Manifest editor, at desktop/light and phone/dark: opening it (the stage moves into the preview on desktop and still draws), Page edits applied as you type, the change list and count, Undo, Redo, Reset section, Esc and the stage moving back; no sideways scroll. Arrange edits appear in the editor's change list and undo. Parts (read-only id, material, group, source with its error messages), Groups (offset, Delete group and its undo), the up axis, Views (hide, add from camera, opens on), Finishes (recolour, add, make default) and the Spec sheet (rename, switch type, add section, change-list wording), each checked in the copied manifest. Reordering: arrow keys on a grip (focus stays with the moved item), a mouse drag of a part into another group and of a view to the front, group Move down, a finish moved by arrow key, a spec row moved by arrow key, and a touch drag (pointer events with `pointerType: 'touch'`) of a spec section to the top; the copied manifest's part, group, finish, view and spec order; Reset all restores the loaded order. Every section on a phone in dark mode without sideways scroll.
+  - Manifest editor, at desktop/light and phone/dark: opening it (the stage moves into the preview on desktop and still draws), Page edits applied as you type, the change list and count, Undo, Redo, Reset section, Esc and the stage moving back; no sideways scroll. Arrange edits appear in the editor's change list and undo. Parts (read-only id, material, group, source with its error messages), Groups (offset, Delete group and its undo), the up axis, Views (hide, add from camera, opens on), Finishes (recolour, add, make default) and the Spec sheet (rename, switch type, add section, change-list wording), each checked in the copied manifest. Reordering: arrow keys on a grip (focus stays with the moved item), a mouse drag of a part into another group and of a view to the front, group Move down, a finish moved by arrow key, a spec row moved by arrow key, and a touch drag (pointer events with `pointerType: 'touch'`) of a spec section to the top; the copied manifest's part, group, finish, view and spec order; Reset all restores the loaded order. Raw JSON: Edit manifest sits in the header; the box starts with the current manifest; broken JSON gives one problem with its line and Go to line selects it; an unknown part, a missing part, an unknown material and a 2-number `explode` are each explained, with the line; a good edit applies (title, material, explode, finish order) and shows in the change list and the box; one Undo reverts it; Paste, Format and Revert. Every section, Raw JSON included, on a phone in dark mode without sideways scroll.
   - Embedding, with a test host on a second local server: load by URL, controls, coded errors, Arrange edit to `change`, `getManifest`; load by transferred bytes; rejection of hosts that aren't allowed; OpenSCAD `setValues` and `render`.
   - Screenshots go to `test-results/` and should be looked at.
   - `MOCKUP_TEST_CDN_DIR` serves three.js and fflate from a local folder for offline runs.
@@ -357,26 +362,20 @@ The project's code is MIT. The OpenSCAD WebAssembly build is GPL-2.0-or-later: t
 - A part source changed in the manifest editor isn't loaded until the files are loaded again; the editor says so.
 - On phones the manifest editor has no live preview; changes show when it closes.
 - The manifest editor's section tabs scroll sideways inside their row on narrow phones.
+- Raw JSON can't add or remove parts, or remove a top-level field the loaded manifest has (page text and `defaultView` can be emptied instead; a removed `views` or `finishes` list means the defaults, a removed `spec` means none).
+- The editor tests run at desktop/light and phone/dark only, not every width and theme.
 - `?manifest=`, `?model=` and `?parent=` don't work inside Claude artifacts.
 - The OpenSCAD edition needs http(s), not `file://`.
 - Browsers limit live WebGL contexts (roughly 16 per page), which matters for pages with many embeds (planned item 5).
 
 ## 12. Planned work
 
-Roughly in priority order. When picking one up, check the notes, update this section in the same change, and add browser tests for anything visible.
+Roughly in priority order. When picking one up, check the notes, update this section in the same change, and add browser tests for anything visible. Numbers stay as first given, so references keep working: done items are removed and their behaviour moves into the sections above (2, editing the spec sheet and page text, and 4, the manifest editor, are both in section 6.11).
 
 ### 1. Load models from a URL without a manifest
 - `viewer.html?file=stl/base.stl&file=stl/lid.stl` (repeatable). Each file becomes a part with automatic grouping, explode and materials.
 - Keep `?manifest=` as is. `?model=` is currently an alias for `?manifest=`; decide whether it should accept a model file instead.
 - Combine with `?manifest=` so a manifest can add extra files?
-
-### 2. Edit the rest of the manifest in the viewer (spec sheet and page text)
-Today Arrange edits groups, explode offsets, see-inside behaviour, materials and part names. Extend editing to the rest of the manifest, so **Copy manifest** (and the embedding API's `change`) produce a complete manifest.
-- **Spec sheet (`spec`):** edit section titles. Add, remove and reorder sections. Switch a section between table rows (`rows`: label/value pairs), bullet items (`items`) and paragraph text (`text`). Add, remove and reorder rows and items. The computed "Model data" section stays read-only.
-- **Page text:** `name`, `subtitle`, `eyebrow`.
-- **Probably also:** `finishes` (add, rename, recolour, remove swatches), `views` and `defaultView` (save the current camera as a named custom view), `units`.
-- Edits are remembered per model in the browser like Arrange edits, and cleared by Reset.
-- Likely UI: an "Edit details" toggle on the spec panel that turns sections into inline fields, matching Arrange's labelled-field style.
 
 ### 3. Save the manifest to a local file
 Give the viewer a **Save** button beside **Copy manifest** that writes `manifest.json` to the user's own computer, straight from the browser. No server is involved: the viewer never sends the manifest anywhere (section 2). Feature-detect and fall back in this order:
@@ -388,36 +387,6 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
   - Section 4 rule 2 forbids `<a download>` because it fails silently inside artifacts. Save needs an exception there, and a reliable way to tell it is running inside an artifact (or to detect that the save didn't happen) so it can fall back to Copy.
   - Embedded viewers: the host can already read the manifest (`change` event, `getManifest`). Should Save also post a `save` message to the host page (browser to browser, no server), or behave exactly as above?
 - **Tests:** browser tests for each path: the file picker (stubbed in the test), the download (Playwright captures it and the test checks the JSON), and the Copy fallback where both are unavailable.
-
-### 4. Manifest editor (full-screen dialog)
-**Status:** in progress on `feat/manifest-editor`, in four phases: (1) shared working manifest, Undo/Redo, change list, the dialog shell; (2) the sections; (3) drag-and-drop reordering; (4) Raw JSON. **Phases 1, 2 and 3 are done** (sections 6.11 and 6.12 describe them). Spec rows and bullets have a grip but no Move up / Move down buttons, to keep phone rows readable; their grips take the arrow keys. The `up` axis turned out not to need a rebuild: it only changes the model's rotation, the explode axis, the size order and the camera.
-
-**Design:** the "Mockup Viewer Roadmap Screens" canvas (https://claude.ai/artifact/VsKyA5omGhSTWbQmZJa6Qr), artboards "Editor: Parts & groups", "Editor: Spec sheet", "Editor: Views & finishes", "Editor: Raw JSON with validation" and "Manifest editor on a phone". The canvas uses the old TODO numbers (it calls this item 5). Its main-viewer Save menu, which offers saving through `mockup serve --writable`, is superseded by item 3.
-
-**Decisions (2026-10-24):**
-- **Live preview:** while the dialog is open, the viewer's own 3D canvas moves into the dialog's preview panel; there is no second 3D view (browsers cap live WebGL contexts, and one renderer stays in step by definition). On phones the panel is left out; changes show when the dialog closes.
-- **Part ids are read-only** in the editor. They name default files (`<id>.stl`) and key remembered edits.
-- **No "Add part from file"** in this item (shown in the design); a possible later enhancement.
-- **Copy manifest only** in the footer until item 3 (Save) is built.
-
-A **Manifest editor** button opens a large dialog that edits everything a manifest can hold in one place. Arrange stays as it is, as the quick inline tool. The editor deliberately duplicates its features, so people can work in either.
-- **Layout:** a large modal (full screen on phones) with a section list down the side (tabs on narrow screens) and the editing area beside it. The 3D view stays live behind or beside it, so changes are visible as you make them.
-- **Every section opens with a short description of what it controls and how to use it,** in plain language, plus a "what you'll see" note where it helps. For example: "Groups are parts that move together. Set how far each group moves in the Exploded view…"
-- **Sections, covering every manifest field:**
-  - **Page:** `name`, `subtitle`, `eyebrow`, `units`, `up` axis.
-  - **Parts:** id (read-only), name, file or `scad` (`file` + `defines`), material (presets plus colour picker), group.
-  - **Groups:** label, explode X/Y/Z, see-inside behaviour. Create, rename, delete (members move to their own group).
-  - **Views:** stock views on/off and their order. Custom views by name and direction, with "Use current camera" to capture one. Default view.
-  - **Finishes:** swatches with name and colour. Add, remove, set the default.
-  - **Spec sheet:** sections, each with a title and a type (table rows / bullet items / paragraph). Rows, items and sections all editable.
-- **Drag and drop to reorder** everything that has an order: parts, groups, views, finishes, spec sections, rows and items. Parts can also be dragged between groups. Every drag has a keyboard alternative (move up/down buttons or arrow keys) and works with touch.
-- **Ease of use:** labelled fields everywhere (same style as Arrange), inline validation (duplicate ids, missing files, bad colours) with plain explanations, Undo/Redo, and a "Changes" count with Reset per section and overall.
-- **Raw JSON tab** for power users: view and edit the manifest as text, with validation before applying.
-- **Footer actions:** Apply / Close, Copy manifest, and Save once item 3 exists. The embedding API's `change` event fires from editor changes too.
-- **Same data as Arrange:** both edit one in-memory manifest and share the per-model edit memory in the browser, so switching between them never loses work.
-- **Tests:** browser tests that open the editor at desktop and phone widths in both themes, reorder by drag and by keyboard, edit a spec section, and confirm Copy/Save output matches. Also an accessibility pass: focus trap in the dialog, Esc to close, labelled controls.
-
-Supersedes the UI part of item 2 (spec and page-text editing happen here). Item 2's data rules still apply.
 
 ### 5. Simple inline embed (display only)
 A one-line way to put a small, read-only model view inside a document or page, like an image.

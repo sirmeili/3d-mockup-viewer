@@ -5,6 +5,7 @@ Interactive mockups for 3D-printed enclosures. Load STL, 3MF, GLB or OpenSCAD pa
 - **Assembled, Exploded and See-inside views**, camera presets, finish swatches and a spec sheet
 - **Section cuts** along X, Y or Z for checking clearances
 - **Arrange**: set groups, explode offsets, materials and names visually, then copy the manifest
+- **Manifest editor**: edit everything in the manifest in one dialog (page text, parts, groups, views, finishes, spec sheet, raw JSON), with a live preview, drag-and-drop reordering, a change list and undo
 - **OpenSCAD edition**: renders `.scad` files in the browser and turns top-level values into editable fields
 - **Embedding API**: another app can put the viewer in an iframe, load models into it and get edited manifests back
 
