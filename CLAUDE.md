@@ -1,6 +1,6 @@
 # 3D Mockup Viewer: notes for Claude
 
-**Source of truth:** `docs/SPEC.md` defines the project: scope, behaviour, rules, planned work and open questions. Read it before changing behaviour. If code and spec disagree, raise it rather than picking one. Update the spec in the same change as the behaviour it describes.
+**Source of truth:** `docs/SPEC.md` defines the project: scope, behaviour, rules, planned work and open questions. Read it before changing behaviour. If code and spec disagree, raise it rather than picking one. Every commit that changes behaviour, interfaces, decisions or planned work includes the matching `docs/SPEC.md` update in that same commit; never commit code with the spec lagging.
 
 Interactive 3D mockups for 3D-printed enclosures. One viewer page (three.js), an optional OpenSCAD add-on, and a Node CLI that bakes mockups into single HTML files. The owner uses it for hardware projects (ESP32 enclosures designed in OpenSCAD) and embeds it in other repos.
 

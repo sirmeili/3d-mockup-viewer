@@ -358,12 +358,22 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 - **Tests:** browser tests for each path: the file picker (stubbed in the test), the download (Playwright captures it and the test checks the JSON), and the Copy fallback where both are unavailable.
 
 ### 4. Manifest editor (full-screen dialog)
+**Status:** in progress on `feat/manifest-editor`, in four phases: (1) shared working manifest, Undo/Redo, change list, the dialog shell; (2) the sections; (3) drag-and-drop reordering; (4) Raw JSON.
+
+**Design:** the "Mockup Viewer Roadmap Screens" canvas (https://claude.ai/artifact/VsKyA5omGhSTWbQmZJa6Qr), artboards "Editor: Parts & groups", "Editor: Spec sheet", "Editor: Views & finishes", "Editor: Raw JSON with validation" and "Manifest editor on a phone". The canvas uses the old TODO numbers (it calls this item 5). Its main-viewer Save menu, which offers saving through `mockup serve --writable`, is superseded by item 3.
+
+**Decisions (2026-10-24):**
+- **Live preview:** while the dialog is open, the viewer's own 3D canvas moves into the dialog's preview panel; there is no second 3D view (browsers cap live WebGL contexts, and one renderer stays in step by definition). On phones the panel is left out; changes show when the dialog closes.
+- **Part ids are read-only** in the editor. They name default files (`<id>.stl`) and key remembered edits.
+- **No "Add part from file"** in this item (shown in the design); a possible later enhancement.
+- **Copy manifest only** in the footer until item 3 (Save) is built.
+
 A **Manifest editor** button opens a large dialog that edits everything a manifest can hold in one place. Arrange stays as it is, as the quick inline tool. The editor deliberately duplicates its features, so people can work in either.
 - **Layout:** a large modal (full screen on phones) with a section list down the side (tabs on narrow screens) and the editing area beside it. The 3D view stays live behind or beside it, so changes are visible as you make them.
 - **Every section opens with a short description of what it controls and how to use it,** in plain language, plus a "what you'll see" note where it helps. For example: "Groups are parts that move together. Set how far each group moves in the Exploded view…"
 - **Sections, covering every manifest field:**
   - **Page:** `name`, `subtitle`, `eyebrow`, `units`, `up` axis.
-  - **Parts:** id, name, file or `scad` (`file` + `defines`), material (presets plus colour picker), group.
+  - **Parts:** id (read-only), name, file or `scad` (`file` + `defines`), material (presets plus colour picker), group.
   - **Groups:** label, explode X/Y/Z, see-inside behaviour. Create, rename, delete (members move to their own group).
   - **Views:** stock views on/off and their order. Custom views by name and direction, with "Use current camera" to capture one. Default view.
   - **Finishes:** swatches with name and colour. Add, remove, set the default.

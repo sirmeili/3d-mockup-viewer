@@ -8,7 +8,7 @@
   - Browser tests: test host on a second local server; URL load, bytes load, controls, Arrange edit → `change`, origin rejection, OpenSCAD values + render.
 
 ## In progress
-- 2026-10-24: `docs/SPEC.md`, the project specification (branch `docs/spec`, awaiting review/merge). TODO.md moved into its "Planned work" section and deleted; CLAUDE.md, README and embedding.md point to it.
+- 2026-10-24: Planned item 4, manifest editor (branch `feat/manifest-editor`). Phase 1 next: shared working manifest, Undo/Redo, dialog shell.
 
 ## Next
 - Tracker side (in `ai-project-tracker`, its own backlog): where mockups live and how an item shows one. It has no mockup or file storage yet.
@@ -25,6 +25,8 @@
 | 2026-10-24 | Embed browser tests use a second real local server, not a Playwright-routed origin. | Chromium's local network access checks block a routed "public" origin from framing localhost. |
 | 2026-10-24 | `docs/SPEC.md` is the project's source of truth; TODO.md folded into it and deleted. | Owner's request: one detailed spec drives the design. |
 | 2026-10-24 | Save (planned item 3) writes to a local file (file picker, download, else Copy); no `mockup serve --writable`, no artifact storage. The viewer never talks to a server beyond reading static files. | Owner: the program must run in the browser without server-side communication. |
+| 2026-10-24 | Manifest editor: live preview reuses the main canvas (moved into the dialog; none on phones); part ids read-only; no Add part from file; Copy only until Save exists. | Owner's choices; one WebGL context. |
+| 2026-10-24 | Every commit updates docs/SPEC.md with its changes. | Owner's rule: the spec is always current. |
 | 2026-10-24 | `<mockup-viewer>` custom element (optional in item 1) not built; noted under the inline-embed item. | Overlaps `<mockup-embed>`; better designed together. |
 
 ## Open questions
