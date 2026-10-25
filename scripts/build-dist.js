@@ -5,6 +5,7 @@
 //   dist/openscad/viewer.html        empty OpenSCAD edition
 //   dist/openscad/index.html         OpenSCAD edition with the sample; published as the "OpenSCAD Mockup Viewer" artifact
 //   dist/openscad/{openscad.js, scad-worker.js, fonts/, OPENSCAD-COPYING.txt}
+//   dist/embed.js                    host helper for the embedding API (docs/embedding.md)
 //   dist/examples/sensor-box/        manifest + STLs + .scad for URL-mode testing
 //   dist/index.html                  landing page for GitHub Pages
 import fs from 'node:fs';
@@ -42,6 +43,7 @@ fs.writeFileSync(scadDemo, stamp(fs.readFileSync(scadDemo, 'utf8'))); console.lo
 write('viewer.html', renderPage({ data: null, title: '3D Mockup Viewer' }));
 write('openscad/viewer.html', renderPage({ data: null, addon: 'openscad', title: 'OpenSCAD Mockup Viewer' }));
 writeOpenscadEdition(path.join(DIST, 'openscad')).forEach((f) => console.log('  openscad/' + f));
+fs.copyFileSync(path.join(ROOT, 'src', 'embed.js'), path.join(DIST, 'embed.js')); console.log('  embed.js');
 
 // example folder for ?manifest= loading
 const exOut = path.join(DIST, 'examples', 'sensor-box');

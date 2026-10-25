@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embed test host</title>
+<!-- Test host for the embedding API. The browser tests serve it, with embed.js, from a second origin (another port).
+     Query: viewer=<viewer page URL>, addParent=0 to leave ?parent= off, timeout=<ms to wait for ready>. -->
+<style>body { margin: 0; padding: 16px; font: 14px system-ui, sans-serif; }</style>
+<div id="box"></div>
+<script type="module">
+  import { embedViewer } from './embed.js';
+  const q = new URLSearchParams(location.search);
+  window.events = [];
+  const viewer = embedViewer(document.getElementById('box'), {
+    src: q.get('viewer'), height: '520px', addParent: q.get('addParent') !== '0', timeout: +q.get('timeout') || 30000
+  });
+  ['ready', 'loaded', 'change', 'error'].forEach((t) => viewer.on(t, (data) => window.events.push({ type: t, data })));
+  window.viewer = viewer;
+</script>

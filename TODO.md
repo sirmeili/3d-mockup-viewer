@@ -2,35 +2,13 @@
 
 Planned work, roughly in priority order. When you pick one up, check the notes, update this file in the same PR, and add browser tests for anything visible.
 
-## 1. Embedding API for host pages (iframe + messages)
-
-Let another app, starting with the owner's project tracker, drive the viewer inside an iframe.
-
-- **Before building:** read the tracker repo and shape the API around how it stores projects and talks to Claude Code.
-- **Host → viewer messages:**
-  - `load`: manifest (object or URL) plus files (ArrayBuffer, transferred, or URL)
-  - `setMode`, `setView`, `setFinish`, `setCut`
-  - `setArrange` (editing on/off)
-  - `getManifest`
-  - OpenSCAD edition: `scad.setValues`, `scad.render`
-- **Viewer → host messages:**
-  - `ready`
-  - `loaded` (part count, groups, overall size, warnings)
-  - `change` (debounced, full manifest after Arrange or spec edits)
-  - `error`
-- Every message carries a protocol version.
-- **Security:** accept messages only from allowed origins (`?parent=` or a build-time setting). Off by default, so the Claude artifacts are unaffected.
-- **Host helper** `embed.js` (exported as `3d-mockup-viewer/embed`): `embedViewer(el, opts)` returning `load()`, `setView()`, `on('change')` and the rest. Optionally a `<mockup-viewer manifest="…">` custom element.
-- **Tests:** a test host page that embeds the viewer, plus browser tests for the round trip (load → edit → change event) and for origin rejection.
-- **Docs:** `docs/embedding.md`.
-
-## 2. Load models from a URL without a manifest
+## 1. Load models from a URL without a manifest
 
 - `viewer.html?file=stl/base.stl&file=stl/lid.stl` (repeatable). Each file becomes a part with automatic grouping, explode and materials.
 - Keep `?manifest=` as is. `?model=` is currently an alias for `?manifest=`; decide whether it should accept a model file instead.
 - Combine with `?manifest=` so a manifest can add extra files?
 
-## 3. Edit the rest of the manifest in the viewer (spec sheet and page text)
+## 2. Edit the rest of the manifest in the viewer (spec sheet and page text)
 
 Today Arrange edits groups, explode offsets, see-inside behaviour, materials and part names. Extend editing to the rest of the manifest, so **Copy manifest** (and the embedding API's `change`) produce a complete manifest.
 
@@ -40,18 +18,18 @@ Today Arrange edits groups, explode offsets, see-inside behaviour, materials and
 - Edits are remembered per model in the browser like Arrange edits, and cleared by Reset.
 - Likely UI: an "Edit details" toggle on the spec panel that turns sections into inline fields, matching Arrange's labelled-field style.
 
-## 4. Save the manifest (not just copy it)
+## 3. Save the manifest (not just copy it)
 
 Give the viewer a **Save** button beside **Copy manifest**, using the best method available where the page is running. Feature-detect, and fall back to the next method.
 
 - **Self-hosted with `mockup serve --writable`:** the CLI's server accepts `PUT` for `manifest.json` (and only files under the served folder). Save writes straight back to the project on disk, ready to commit. Off unless the flag is given.
-- **Embedded in a host app:** Save sends the manifest to the host (the embedding API's `change` / a `save` message), and the host stores it (e.g. the tracker writing to the project). Depends on item 1.
+- **Embedded in a host app:** Save sends the manifest to the host (the embedding API's `change` / a `save` message), and the host stores it (e.g. the tracker writing to the project). Uses the embedding API (done, `docs/embedding.md`).
 - **Plain browser, self-hosted:** in Chromium, the File System Access API (`showSaveFilePicker`) saves `manifest.json` straight to a chosen file and remembers the handle for later saves. Elsewhere, a normal download.
 - **Inside Claude artifacts:** downloads are blocked there. Options are artifact storage (a "Saved mockups" list holding manifests, and optionally the part files, reopenable on any device; check which storage capability the account has) or keep Copy as the fallback.
 - Show what happened ("Saved to manifest.json", "Downloaded", "Copied") and keep the in-browser edit memory in sync after a save.
 - **Tests:** a browser test for the `--writable` round trip (edit → Save → file on disk changed), and that Save is hidden or falls back where unsupported.
 
-## 5. Manifest editor (full-screen dialog)
+## 4. Manifest editor (full-screen dialog)
 
 A **Manifest editor** button opens a large dialog that edits everything a manifest can hold in one place. Arrange stays as it is, as the quick inline tool. The editor deliberately duplicates its features, so people can work in either.
 
@@ -67,13 +45,13 @@ A **Manifest editor** button opens a large dialog that edits everything a manife
 - **Drag and drop to reorder** everything that has an order: parts, groups, views, finishes, spec sections, rows and items. Parts can also be dragged between groups. Every drag has a keyboard alternative (move up/down buttons or arrow keys) and works with touch.
 - **Ease of use:** labelled fields everywhere (same style as Arrange), inline validation (duplicate ids, missing files, bad colours) with plain explanations, Undo/Redo, and a "Changes" count with Reset per section and overall.
 - **Raw JSON tab** for power users: view and edit the manifest as text, with validation before applying.
-- **Footer actions:** Apply / Close, Copy manifest, and Save once item 4 exists. The embedding API's `change` event (item 1) fires from editor changes too.
+- **Footer actions:** Apply / Close, Copy manifest, and Save once item 3 exists. The embedding API's `change` event (`docs/embedding.md`) fires from editor changes too.
 - **Same data as Arrange:** both edit one in-memory manifest and share the per-model edit memory in the browser, so switching between them never loses work.
 - **Tests:** browser tests that open the editor at desktop and phone widths in both themes, reorder by drag and by keyboard, edit a spec section, and confirm Copy/Save output matches. Also an accessibility pass: focus trap in the dialog, Esc to close, labelled controls.
 
-Supersedes the UI part of item 3 (spec and page-text editing happen here). Item 3's data rules still apply.
+Supersedes the UI part of item 2 (spec and page-text editing happen here). Item 2's data rules still apply.
 
-## 6. Simple inline embed (display only)
+## 5. Simple inline embed (display only)
 
 A one-line way to put a small, read-only model view inside a document or page, like an image.
 
@@ -92,6 +70,6 @@ A one-line way to put a small, read-only model view inside a document or page, l
 - **Compact mode:** model only, with a slim control strip (Show, View, Finish swatches) overlaid or below. Drag to rotate, scroll or pinch to zoom. No header, parts list, spec sheet, Arrange, editor or Load files. Respects the page's light/dark mode.
 - **Many embeds on a page:** browsers cap live WebGL contexts at roughly 16. Show a still preview until the embed scrolls into view or is clicked, then start the 3D view. Release contexts that scroll far away.
 - **Static fallback for places that strip scripts** (e.g. GitHub READMEs): have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer.
-- **Shares plumbing with item 1.** The embedding API is the full two-way version; build this first and reuse it there.
+- **Shares plumbing with the embedding API** (done, `docs/embedding.md`), the full two-way version. Reuse its viewer-side pieces. Left over from that work: an optional `<mockup-viewer manifest="…">` custom element wrapping `embedViewer`; build it alongside `<mockup-embed>` if it's still wanted.
 - **Tests:** a test page with several embeds (desktop and phone, light and dark), checking that each draws, controls work, off-screen embeds stay as stills, and nothing scrolls sideways.
-- **Docs:** `docs/embedding.md`, shared with item 1.
+- **Docs:** add a section to `docs/embedding.md`.

@@ -8,6 +8,7 @@
   },
   "exports": {
     ".": "./lib/index.js",
+    "./embed": "./src/embed.js",
     "./package.json": "./package.json"
   },
   "files": [
