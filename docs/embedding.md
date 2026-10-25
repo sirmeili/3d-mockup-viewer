@@ -56,6 +56,7 @@ Every command method returns a promise. It resolves with the viewer's result, or
 | `setCut(axis, position?)` | `axis`: `'off'`, `'x'`, `'y'` or `'z'`. `position`: 0 to 1 across the model (default: unchanged, 0.5 at first). |
 | `setArrange(on)` | Opens or closes Arrange. |
 | `getManifest()` | The full current manifest, including Arrange edits: what **Copy manifest** produces. |
+| `snapshot()` | A still of the current view: `{ image, width, height }`, where `image` is a JPEG data URL (the model over the stage's background) and the size is in device pixels. |
 | `scad.setValues({ name: value })` | OpenSCAD edition. Sets editable top-level values. Numbers, booleans and strings must match each value's type. It's all or nothing: one bad name or type and nothing changes. Resolves with `{ values }`, every current value. Doesn't render. |
 | `scad.render()` | OpenSCAD edition. Re-renders every part with the current values. Resolves with a model summary. |
 | `send(type, body)` | Sends a raw message (see [Protocol](#protocol)). |
@@ -114,7 +115,7 @@ Host → viewer, posted to the iframe's `contentWindow` with the viewer's origin
 { protocol: 'mockup-viewer', version: 1, id: 7, type: 'setMode', mode: 'exploded' }
 ```
 
-`type` is one of `load`, `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `scad.setValues` or `scad.render`. The arguments are fields next to it, named as in the helper: `manifest`, `files`, `base`, `mode`, `view`, `finish`, `axis`, `position`, `on`, `values`. `id` is optional; without one, no reply is sent.
+`type` is one of `load`, `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `snapshot`, `scad.setValues` or `scad.render`. The arguments are fields next to it, named as in the helper: `manifest`, `files`, `base`, `mode`, `view`, `finish`, `axis`, `position`, `on`, `values`. `id` is optional; without one, no reply is sent.
 
 Viewer → host replies:
 

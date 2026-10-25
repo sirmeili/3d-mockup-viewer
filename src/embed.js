@@ -102,6 +102,8 @@ export function embedViewer(el, opts = {}) {
     setCut(axis, position) { return send('setCut', position === undefined ? { axis } : { axis, position }); },
     setArrange(on) { return send('setArrange', { on: !!on }); },
     getManifest() { return send('getManifest').then((r) => r.manifest); },
+    /** A still of the current view: {image: JPEG data URL, width, height} in device pixels. */
+    snapshot() { return send('snapshot'); },
     scad: {
       setValues(values) { return send('scad.setValues', { values }); },
       render() { return send('scad.render'); }

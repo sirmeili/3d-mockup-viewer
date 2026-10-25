@@ -241,7 +241,16 @@ One section per `spec` entry (definition list for `rows`, bullets for `items`, a
 - **Undo history:** every edit records a snapshot of the edits first. Typing in one field (or one explode axis) within 1.5 seconds counts as one step, and an edit that changes nothing isn't recorded. Up to 200 steps. Undo and Redo are in the editor's footer and cover Arrange's edits too. History starts empty for each model and survives an OpenSCAD re-render of the same parts.
 - Each edit is remembered, redraws the model and panels, refreshes the editor's change list, and (when embedded) schedules the `change` event.
 
-### 6.13 Messages and failure states
+### 6.13 Compact mode (`?embed`)
+What `<mockup-embed>` and plain iframes show: `viewer.html?embed&manifest=…` (planned item 5 builds the element on it).
+- A small inline script at the top of the page sets `data-embed` on the root before the page paints, so the full layout never flashes. CSS then hides everything in the page except the stage and the control strip: header (with Load files and Edit manifest), warnings, parts and spec panels, footer, the OpenSCAD panel, the stage's hint, the Edges toggle and the control labels. The stage fills the frame and the strip sits below it; the page background is transparent.
+- Load files and drag-and-drop are off; Arrange and the manifest editor aren't shown even when embedded.
+- `controls`: any of `show`, `view`, `finish`, `cut` (comma-separated), or `none` for no strip. Default `show,view,finish`. Hidden groups get `data-off`.
+- Starting state, applied after the model loads: `mode` (`assembled`, `exploded`, `inside`), `view` (a listed view name; the camera is refitted either way), `finish` (a finish name or colour).
+- `theme=light|dark` forces a theme; otherwise the frame follows the system setting like any page.
+- Query strings don't reach pages inside Claude artifacts, so compact mode is for self-hosted viewers.
+
+### 6.14 Messages and failure states
 - The loading tag shows progress ("Loading model…", "Reading files…", "Rendering 9 parts…") and final failures.
 - Non-fatal problems (missing or unreadable files, skipped file types, OpenSCAD parts that failed) are listed in the warning line under the controls.
 - If three.js fails to load, the stage says so and nothing else runs.
@@ -311,7 +320,7 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 
 - **Off by default.** The viewer listens only when it is framed and its parent's origin is allowed: by `?parent=origin[,origin]`, or by the build-time list (`--embed-origin`), which, when set, makes `?parent=` ignored. Messages must come from `window.parent` with an allowed origin and carry `protocol: 'mockup-viewer'`.
 - **Protocol version 1.** Every message carries the version. A breaking change increases it, and the viewer answers other versions with a `version` error.
-- **Commands:** `load`, `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `scad.setValues`, `scad.render`. They run one at a time, in order, after the page's own model has loaded. Each reply is `{ ok: true, result }` or `{ ok: false, error: { code, message } }`.
+- **Commands:** `load`, `setMode`, `setView`, `setFinish`, `setCut`, `setArrange`, `getManifest`, `snapshot`, `scad.setValues`, `scad.render`. `snapshot` returns a JPEG of the current view, painted over the stage's background gradient so it matches the live view. They run one at a time, in order, after the page's own model has loaded. Each reply is `{ ok: true, result }` or `{ ok: false, error: { code, message } }`.
 - **Events:** `ready` (after the initial load), `loaded` (after every build), `change` (400 ms after the last edit in Arrange or the manifest editor, with the full manifest), `error` (failures not caused by a command).
 - **Credentials:** loads requested by a host allowed only through `?parent=` fetch with `credentials: 'omit'`, because anyone can frame the viewer with their own `?parent=`. With a build-time list, fetches send cookies as usual.
 - **The viewer UI stays complete when embedded**, and Arrange is available.
@@ -339,7 +348,8 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 - `npm run test:browser` (Playwright, about 6 minutes; needs a build and Chromium):
   - Every dist page (demo, OpenSCAD demo, URL mode in both editions) at 1200 px and 400 px, light and dark. Checks: title, no warnings, no horizontal scroll, the canvas is actually drawn (distinct-colour count), exploded and see-inside views, a section cut, Arrange showing one box per group with visible labels, no console errors. On the OpenSCAD demo at desktop/light, a value change and a full re-render.
   - Manifest editor, at desktop/light and phone/dark: opening it (the stage moves into the preview on desktop and still draws), Page edits applied as you type, the change list and count, Undo, Redo, Reset section, Esc and the stage moving back; no sideways scroll. Arrange edits appear in the editor's change list and undo. Parts (read-only id, material, group, source with its error messages), Groups (offset, Delete group and its undo), the up axis, Views (hide, add from camera, opens on), Finishes (recolour, add, make default) and the Spec sheet (rename, switch type, add section, change-list wording), each checked in the copied manifest. Reordering: arrow keys on a grip (focus stays with the moved item), a mouse drag of a part into another group and of a view to the front, group Move down, a finish moved by arrow key, a spec row moved by arrow key, and a touch drag (pointer events with `pointerType: 'touch'`) of a spec section to the top; the copied manifest's part, group, finish, view and spec order; Reset all restores the loaded order. Raw JSON: Edit manifest sits in the header; the box starts with the current manifest; broken JSON gives one problem with its line and Go to line selects it; an unknown part, a missing part, an unknown material and a 2-number `explode` are each explained, with the line; a good edit applies (title, material, explode, finish order) and shows in the change list and the box; one Undo reverts it; Paste, Format and Revert. Every section, Raw JSON included, on a phone in dark mode without sideways scroll.
-  - Embedding, with a test host on a second local server: load by URL, controls, coded errors, Arrange edit to `change`, `getManifest`; load by transferred bytes; rejection of hosts that aren't allowed; OpenSCAD `setValues` and `render`.
+  - Compact mode at 600 × 340 in dark mode: only the stage and the chosen controls show, the starting mode, view and finish apply, the model draws, and the page fits its frame both ways; `controls=none` hides the strip.
+  - Embedding, with a test host on a second local server: load by URL, controls, a snapshot, coded errors, Arrange edit to `change`, `getManifest`; load by transferred bytes; rejection of hosts that aren't allowed; OpenSCAD `setValues` and `render`.
   - Screenshots go to `test-results/` and should be looked at.
   - `MOCKUP_TEST_CDN_DIR` serves three.js and fflate from a local folder for offline runs.
 - Rule: every visible feature gets a browser test.
@@ -364,7 +374,7 @@ The project's code is MIT. The OpenSCAD WebAssembly build is GPL-2.0-or-later: t
 - The manifest editor's section tabs scroll sideways inside their row on narrow phones.
 - Raw JSON can't add or remove parts, or remove a top-level field the loaded manifest has (page text and `defaultView` can be emptied instead; a removed `views` or `finishes` list means the defaults, a removed `spec` means none).
 - The editor tests run at desktop/light and phone/dark only, not every width and theme.
-- `?manifest=`, `?model=` and `?parent=` don't work inside Claude artifacts.
+- `?manifest=`, `?model=`, `?parent=` and `?embed` (with its options) don't work inside Claude artifacts.
 - The OpenSCAD edition needs http(s), not `file://`.
 - Browsers limit live WebGL contexts (roughly 16 per page), which matters for pages with many embeds (planned item 5).
 
@@ -389,7 +399,7 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 - **Tests:** browser tests for each path: the file picker (stubbed in the test), the download (Playwright captures it and the test checks the JSON), and the Copy fallback where both are unavailable.
 
 ### 5. Simple inline embed (display only)
-**Status:** in progress on `feat/inline-embed`, in phases: (1) compact mode and a `snapshot` command in the viewer; (2) the `<mockup-embed>` element with lazy loading and stills; (3) `embed.js` as a classic script plus `embed.mjs`; (4) tests and docs.
+**Status:** in progress on `feat/inline-embed`, in phases: (1) compact mode and a `snapshot` command in the viewer (done: sections 6.13 and 9); (2) the `<mockup-embed>` element with lazy loading and stills; (3) `embed.js` as a classic script plus `embed.mjs`; (4) tests and docs.
 
 **Decisions (2026-10-24):**
 - `<mockup-embed>` wraps an iframe of the viewer in compact mode, reusing the viewer and the embedding API rather than a second renderer.

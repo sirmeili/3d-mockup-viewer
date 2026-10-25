@@ -9,7 +9,7 @@
   - Browser tests: test host on a second local server; URL load, bytes load, controls, Arrange edit → `change`, origin rejection, OpenSCAD values + render.
 
 ## In progress
-- 2026-10-24: Planned item 5, simple inline embed (branch `feat/inline-embed`). Phase 1 next: compact mode and `snapshot`.
+- 2026-10-24: Planned item 5, simple inline embed (branch `feat/inline-embed`). Phase 1 done: compact mode (`?embed`, `controls`, `mode`, `view`, `finish`, `theme`) and the `snapshot` command. Phase 2 next: the `<mockup-embed>` element.
 
 ## Next
 - Tracker side (in `ai-project-tracker`, its own backlog): where mockups live and how an item shows one. It has no mockup or file storage yet.

@@ -475,6 +475,39 @@ test('manifest editor: sections fit a phone (dark)', async () => {
   }
 });
 
+// ---------- compact mode (?embed), what <mockup-embed> shows ----------
+test('compact mode: model and chosen controls only, with the starting state', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 600, height: 340 } });
+  await routeCdn(ctx);
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  try {
+    await page.goto(BASE + 'viewer.html?embed&manifest=examples/sensor-box/manifest.json&controls=show,finish&mode=exploded&view=top&finish=Slate%20blue&theme=dark');
+    await page.waitForFunction(() => document.getElementById('loading').hidden, null, { timeout: 60000 });
+    assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
+    for (const sel of ['header', '#lower', '#status', '#foot', '#openBox', '#viewSeg', '#cutSeg', '#edges']) {
+      assert.equal(await page.locator(sel).isVisible(), false, sel + ' is hidden');
+    }
+    for (const sel of ['#stage', '#m-exploded', '#f-slate-blue']) assert.ok(await page.locator(sel).isVisible(), sel + ' shows');
+    assert.equal(await page.getAttribute('#m-exploded', 'aria-pressed'), 'true', 'starts exploded');
+    assert.equal(await page.getAttribute('#v-top', 'aria-pressed'), 'true', 'starts on the top view');
+    assert.equal(await page.getAttribute('#f-slate-blue', 'aria-pressed'), 'true', 'starts with Slate blue');
+    assert.ok(await canvasColours(page) > 40, 'model drawn');
+    const fit = await page.evaluate(() => [document.documentElement.scrollWidth - innerWidth, document.documentElement.scrollHeight - innerHeight]);
+    assert.ok(fit[0] <= 1 && fit[1] <= 1, `compact page fits its frame (overflow ${fit})`);
+    await page.screenshot({ path: path.join(SHOTS, 'compact-600x340-dark.png') });
+
+    await page.goto(BASE + 'viewer.html?embed&manifest=examples/sensor-box/manifest.json&controls=none');
+    await page.waitForFunction(() => document.getElementById('loading').hidden, null, { timeout: 60000 });
+    assert.equal(await page.locator('.controls').isVisible(), false, 'controls=none leaves the model alone');
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
 // ---------- embedding API: a host page on another origin drives the viewer in an iframe ----------
 // The host is a second real server on another port, so a different origin. (A Playwright-routed origin
 // doesn't work: Chromium's local network access checks then refuse to frame localhost.)
@@ -537,6 +570,9 @@ test('embed: host loads by URL, sets controls, and gets change events from Arran
     assert.deepEqual(await page.evaluate(() => viewer.setCut('x', 0.25)), { axis: 'x', position: 0.25 });
     assert.equal(await f.getAttribute('#cut-x', 'aria-pressed'), 'true');
     await page.evaluate(() => viewer.setCut('off'));
+    const shot = await page.evaluate(() => viewer.snapshot());
+    assert.match(shot.image, /^data:image\/jpeg;base64,/);
+    assert.ok(shot.width > 100 && shot.image.length > 10000, 'snapshot holds a picture of the model');
 
     // bad input comes back as a coded error, not silence
     const code = (fn) => page.evaluate(fn);
