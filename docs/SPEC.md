@@ -389,6 +389,16 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 - **Tests:** browser tests for each path: the file picker (stubbed in the test), the download (Playwright captures it and the test checks the JSON), and the Copy fallback where both are unavailable.
 
 ### 5. Simple inline embed (display only)
+**Status:** in progress on `feat/inline-embed`, in phases: (1) compact mode and a `snapshot` command in the viewer; (2) the `<mockup-embed>` element with lazy loading and stills; (3) `embed.js` as a classic script plus `embed.mjs`; (4) tests and docs.
+
+**Decisions (2026-10-24):**
+- `<mockup-embed>` wraps an iframe of the viewer in compact mode, reusing the viewer and the embedding API rather than a second renderer.
+- Stills come from the browser: an embed renders once it nears the viewport, takes a still of itself (`snapshot`), and releases its 3D view when it scrolls far away; clicking a still starts the 3D view again.
+- `src` takes a manifest URL for now; a single model file works once item 1 adds `?file=`.
+- `dist/embed.js` becomes a classic script that registers `<mockup-embed>` and exposes `window.mockupViewer.embedViewer`; the ES module moves to `dist/embed.mjs`. The npm export `3d-mockup-viewer/embed` stays a module. `docs/embedding.md` changes to match.
+- The static PNG/GIF for places that strip scripts moves to its own planned item (6).
+- `<mockup-viewer>`, the optional two-way element, isn't built.
+
 A one-line way to put a small, read-only model view inside a document or page, like an image.
 - **Script tag + custom element:**
   ```html
@@ -404,11 +414,12 @@ A one-line way to put a small, read-only model view inside a document or page, l
 - **Iframe fallback** for pages that don't allow scripts: `viewer.html?embed&manifest=…`.
 - **Compact mode:** model only, with a slim control strip (Show, View, Finish swatches) overlaid or below. Drag to rotate, scroll or pinch to zoom. No header, parts list, spec sheet, Arrange, editor or Load files. Respects the page's light/dark mode.
 - **Many embeds on a page:** browsers cap live WebGL contexts at roughly 16. Show a still preview until the embed scrolls into view or is clicked, then start the 3D view. Release contexts that scroll far away.
-- **Static fallback for places that strip scripts** (e.g. GitHub READMEs): have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer.
-- **Shares plumbing with the embedding API**, the full two-way version. Reuse its viewer-side pieces. Note that today's `embed.js` is an ES module, while the snippet above loads it as a classic script; resolve that (two builds, or a module script tag) when building this.
-- Left over from the embedding API: an optional `<mockup-viewer manifest="…">` custom element wrapping `embedViewer`. Build it alongside `<mockup-embed>` if it's still wanted.
+- **Shares plumbing with the embedding API**, the full two-way version. Reuse its viewer-side pieces.
 - **Tests:** a test page with several embeds (desktop and phone, light and dark), checking that each draws, controls work, off-screen embeds stay as stills, and nothing scrolls sideways.
 - **Docs:** add a section to `docs/embedding.md`.
+
+### 6. Static image of a mockup (for places that strip scripts)
+Have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer, e.g. in a GitHub README. Node has no WebGL, so decide first how to render: a small software rasterizer in Node (no new dependency, plainer look) or headless Chromium through Playwright when installed (exact match, optional dependency and browser download). Split out of item 5 on 2026-10-24.
 
 ### Outside this repository
 - **Tracker integration** (`ai-project-tracker`): decide where a project's mockup lives and how an item shows one, then use the embedding API. The tracker has no mockup or file storage yet; this belongs in its own backlog.
