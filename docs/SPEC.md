@@ -414,6 +414,51 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 ### 6. Static image of a mockup (for places that strip scripts)
 Have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer, e.g. in a GitHub README. Node has no WebGL, so decide first how to render: a small software rasterizer in Node (no new dependency, plainer look) or headless Chromium through Playwright when installed (exact match, optional dependency and browser download). Split out of item 5 on 2026-10-24.
 
+### 7. Share an OpenSCAD mockup as one link
+One link that holds the manifest and the OpenSCAD sources, for sending a design to friends. Opening it shows the mockup, rendered in the recipient's browser and read-only. Nothing is stored on any server: the viewer page comes from ordinary static hosting (GitHub Pages, or another project's own copy), and the design travels only in the link. Added 2026-10-26; every decision below was confirmed by the owner the same day.
+
+- **Where it works:** self-hosted OpenSCAD-edition pages only, meaning GitHub Pages and other projects' copies. It is not offered inside Claude artifacts or when the viewer is embedded. **Share link** is shown only on a top-level `http(s)` page (not inside a frame), which rules out both, since artifacts run in a frame.
+- **Why the fragment:** the data goes after `#` (`viewer.html#m=<payload>`), not in the query string. Browsers never send the fragment to the server, so it doesn't reach the host's logs either. This keeps to "no server-side communication" (section 2).
+- **Payload:** JSON `{ v: 1, viewer, manifest, sources: { path: text }, values? }`, encoded as UTF-8, compressed with raw deflate, then written as base64url.
+  - `v`: the payload format. Every later viewer keeps reading every earlier version (see version drift below).
+  - `viewer`: the version of the viewer that made the link, used only in messages ("made with 0.3.0").
+  - `manifest`: the current manifest (section 6.9), so Arrange and manifest-editor edits come with it.
+  - `sources`: the main `.scad` file plus every file it reaches through `include`, `use` and `import()`, keyed by the same paths URL mode uses (section 5.3). Text-format imports (SVG, DXF, OFF, ASCII STL and OBJ, DAT) go in as text and count toward the size. Binary imports (PNG, binary STL) can't go in. Share link names the file that blocks it and says the model can't be shared as a link.
+  - `values`: only the OpenSCAD panel fields that differ from their defaults (section 7.2), so the recipient sees the same variant.
+- **Compression:** fflate's `deflateSync`/`inflateSync` in the viewer (already loaded on every page, 3.5); Node's `zlib.deflateRawSync`/`inflateRawSync` in the CLI. Raw deflate is a standard format, so either side reads the other's links; the bytes needn't match. Tests check both directions.
+- **Size:** the sample model (`examples/sensor-box`, one 5 KB file and its manifest) comes to about 2.4 KB of link. OpenSCAD source usually compresses to a third or less, so a 20 KB model should give a link of roughly 6 to 8 KB. Limits:
+  - Above 8 KB, a note: "Some apps cut long links; check it opens before sending."
+  - Above 64 KB, Share link refuses and points to `mockup build`. Chrome itself accepts about 2 MB.
+- **What can't go in:** STL, 3MF and GLB parts, because a mesh is about 50 bytes per triangle, far too big for a link. A mockup whose parts aren't all OpenSCAD-rendered can't be shared this way; the button says why and points to `mockup build` (a single HTML file) instead.
+- **Making a link (viewer):** a **Share link** button in the OpenSCAD edition, next to Copy manifest (in Arrange and in the manifest editor's footer). It is enabled when every part comes from `scad` and all sources are loaded. The link points to the page's own address (origin and path), so another project's copy makes links to itself. The button copies the link inside the click handler (rule 2). If the clipboard is blocked, it shows the link in a text box, the same way Copy manifest does. It also shows the link's length and a one-line reminder that anyone with the link can read the full source.
+- **Making a link (CLI):** `mockup link <manifest> [--base <url>] [--root <dir>] [--lib <dir>]` prints the link. It gathers sources the way `mockup build --openscad` does, so the `enclosure-mockup` skill can print a share link next to the page it builds. `--base` defaults to the GitHub Pages empty OpenSCAD viewer (`https://sirmeili.github.io/3d-mockup-viewer/openscad/viewer.html`). This is a new, additive command (rule in 8.3).
+- **Opening a link:** any OpenSCAD-edition page that finds `#m=` at start decodes the payload and shows it instead of any baked model. It loads through `mockupScad.loadSources(sources, manifest)` as URL mode does, applies `values` and renders. The fragment stays in the address bar, so reloading works. Failures go to the warning line: corrupt data, a version newer than this viewer, a missing include, or a link opened in the standard edition ("open this link in the OpenSCAD viewer").
+- **Read-only when opened from a link:** for now a shared mockup can be looked at but not changed.
+  - Load files, drag-and-drop, Arrange, Edit manifest and Share link are hidden.
+  - The OpenSCAD panel shows the values with its fields disabled and no Render button.
+  - The viewing controls still work: show modes, views, finishes, section cut and Edges.
+  - Remembered edits (section 6.12) are neither applied nor saved. Otherwise the recipient's own earlier edits to a manifest with the same name would change what they were sent.
+- **Version drift:** GitHub Pages serves only the latest release, so a link always opens in the newest viewer. Effects:
+  - The payload format is covered: newer viewers keep reading old `v` values.
+  - Manifest fields already stay backward compatible.
+  - The real risk is an upgrade of the OpenSCAD engine (`openscad-wasm-prebuilt`). A model can render slightly differently or, rarely, fail on a newer OpenSCAD. The link then shows the warning, with the `viewer` version it was made with.
+  - The owner accepts this risk. Pinning links to a release would need versioned folders on Pages, each with its own 11 MB `openscad.js`.
+- **Safety:** treat the link as untrusted input.
+  - Limit the decompressed size (5 MB) and the number of files (40, as in URL mode).
+  - Show manifest text only as text, never as HTML.
+  - OpenSCAD runs in its WebAssembly sandbox, with no network or disk access.
+- **Privacy:** no new exposure. A hosted mockup already exposes its sources: `?manifest=` pages fetch the `.scad` files from public URLs, and `--openscad` builds embed them. The difference is that a sent link can't be taken back the way a hosted file can be deleted. Putting it through a URL shortener also stores it on that service's server.
+- **Not now:** a `getShareLink` command in the embedding API; editing and re-sharing from a shared link.
+- **Tests:**
+  - Node: encode and decode round trip; `mockup link` on `examples/sensor-box`; a link made by the CLI decodes in the viewer's decoder and the reverse; rejection of oversize payloads and newer versions; a binary import blocks the link with a message.
+  - Browser:
+    - Make a link with Share link, open it in a fresh page, and check that the parts render, the changed values are applied, and the page is read-only.
+    - Check that a corrupt link shows a warning without console errors.
+    - Check that the button is disabled when a part is an STL, and hidden inside a frame.
+    - Check the clipboard fallback.
+    - Run at 1200 px and 400 px, light and dark, as usual.
+- **When done:** remove this item. Add the route to 3.4 and 5.3, Share link to 6.8, 6.9 and 6.11, the read-only shared state to 6 and 7.4, `mockup link` to 8.3, and the size, source and drift limits to section 11.
+
 ### Outside this repository
 - **Tracker integration** (`ai-project-tracker`): decide where a project's mockup lives and how an item shows one, then use the embedding API. The tracker has no mockup or file storage yet; this belongs in its own backlog.
 
