@@ -51,6 +51,8 @@ A mockup is described by one `manifest.json`. Paths are relative to the manifest
 | `material` | `finish`, `pcb-green`, `pcb-red`, `pcb-blue`, `pcb-black`, `pcb-purple`, `metal`, `brass`, `plastic-black`, `plastic-white`, `rubber`, `led`, `clear`, `#rrggbb`, or `keep` (GLB's own material). Default: guessed from the name. |
 | `file` | STL, 3MF or GLB. Default `<id>.stl`. A 3MF with several objects becomes several parts (`<id>-1`, `<id>-2`, …). |
 | `scad` | `{ "file", "defines" }`. `mockup build` renders it with these `-D` values and writes `<id>.stl`. The OpenSCAD edition renders it in the browser. |
+| `hidden` | `true`: the part starts switched off. It is still loaded and listed, unticked, so readers can tick it back on. On pages with Arrange, ticking or unticking a part sets this. |
+| `omit` | `true`: the part is left out of the mockup. It is never loaded or rendered, and isn't in the view, the parts list, the size or the counts. It stays in the manifest, so you can put it back later (in the manifest editor, Raw JSON or the file itself). Wins over `hidden`. |
 
 ## Groups
 

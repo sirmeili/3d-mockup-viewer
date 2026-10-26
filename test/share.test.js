@@ -55,6 +55,24 @@ test('refuses what a link cannot carry', () => {
   assert.throws(() => gatherShare({ manifest: path.join(dir, 'miss/manifest.json') }), /gone\.scad is missing/);
 });
 
+test('hidden and omitted parts: the manifest keeps both, and omitted-only sources stay out', () => {
+  const dir = tmp();
+  write(dir, {
+    'v/manifest.json': JSON.stringify({ parts: [
+      { id: 'case', scad: { file: 'case.scad' } },
+      { id: 'lid', hidden: true, scad: { file: 'case.scad', defines: { part: 'lid' } } },
+      { id: 'jig', omit: true, scad: { file: 'jig.scad' } },
+      { id: 'board', omit: true, file: 'board.stl' }
+    ] }),
+    'v/case.scad': 'cube(1);\n', 'v/jig.scad': 'include <jig-lib.scad>\n'
+  });
+  const { payload } = gatherShare({ manifest: path.join(dir, 'v/manifest.json') });
+  assert.deepEqual(Object.keys(payload.sources), ['case.scad'], 'jig.scad (omitted part only) is left out; the omitted mesh part is fine');
+  assert.equal(payload.manifest.parts.find((p) => p.id === 'lid').hidden, true);
+  assert.deepEqual(payload.manifest.parts.find((p) => p.id === 'board'), { id: 'board', omit: true, file: 'board.stl' });
+  assert.equal(payload.manifest.parts.find((p) => p.id === 'jig').omit, true);
+});
+
 test('decoding rejects damaged, newer and oversized links', () => {
   const good = { v: 1, manifest: { parts: [] }, main: 'a.scad', sources: { 'a.scad': 'cube(1);' } };
   assert.deepEqual(decodeShare(encodeShare(good)), good);
@@ -63,8 +81,6 @@ test('decoding rejects damaged, newer and oversized links', () => {
   assert.throws(() => decodeShare(pack({ ...good, v: 2, viewer: '3.0.0' })), /newer viewer \(3\.0\.0\)/);
   assert.throws(() => decodeShare(pack({ ...good, main: 'b.scad' })), /main OpenSCAD file/);
   assert.throws(() => decodeShare(pack({ ...good, sources: { 'a.scad': 1 } })), /not text/);
-  assert.throws(() => decodeShare(pack({ ...good, hidden: 'lid' })), /hidden parts/);
-  assert.deepEqual(decodeShare(pack({ ...good, hidden: ['lid'] })).hidden, ['lid']);
   assert.throws(() => decodeShare('A'.repeat(SHARE_MAX_LENGTH + 1)), /longer than/);
   const bomb = zlib.deflateRawSync(Buffer.alloc(6 * 1024 * 1024, 32)).toString('base64url');
   assert.throws(() => decodeShare(bomb), /could not be unpacked/);

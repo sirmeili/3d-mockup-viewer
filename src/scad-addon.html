@@ -353,7 +353,7 @@
     const ov = overrides();
     const files = withAliases(S.sources);
     if (mf && mf.parts && mf.parts.some((p) => p.scad)) {
-      return mf.parts.filter((p) => p.scad).map((p) => {
+      return mf.parts.filter((p) => p.scad && !p.omit).map((p) => {
         const defs = Object.assign({}, ov);
         Object.entries(p.scad.defines || {}).forEach(([k, v]) => { defs[k] = typeof v === 'string' ? JSON.stringify(v) : String(v); });
         return { id: p.id || slug(p.name), name: p.name, scad: { file: srcPath(p.scad.file || S.main), defines: Object.assign({}, p.scad.defines || {}) }, job: { files, main: srcPath(p.scad.file || S.main), defines: defs } };
@@ -409,7 +409,8 @@
       const mf = JSON.parse(JSON.stringify(S.manifest || {}));
       const planned = parts.filter((p) => out[p.id]);
       if (mf.parts && mf.parts.some((p) => p.scad)) {
-        mf.parts = mf.parts.filter((p) => out[p.id]).map((p) => Object.assign({}, p, { file: p.id + '.stl' }));
+        // omitted parts aren't rendered but stay in the manifest, so it still lists them
+        mf.parts = mf.parts.filter((p) => out[p.id] || p.omit).map((p) => (p.omit ? p : Object.assign({}, p, { file: p.id + '.stl' })));
       } else {
         const known = {}; (mf.parts || []).forEach((p) => { known[p.id] = p; });
         mf.parts = planned.map((p) => Object.assign({ id: p.id, name: p.name }, known[p.id] || {}, { file: p.id + '.stl' }));
@@ -483,7 +484,7 @@
     shareData(mf) {
       if (!S.main) throw new Error('No OpenSCAD model is loaded.');
       const sources = {};
-      const queue = [S.main].concat((mf.parts || []).map((p) => p.scad && p.scad.file).filter(Boolean));
+      const queue = [S.main].concat((mf.parts || []).filter((p) => !p.omit).map((p) => p.scad && p.scad.file).filter(Boolean));
       for (let i = 0; i < queue.length; i++) {
         const name = queue[i];
         if (sources[name] !== undefined) continue;

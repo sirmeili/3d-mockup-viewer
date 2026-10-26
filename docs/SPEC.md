@@ -138,7 +138,7 @@ Also respected: `prefers-reduced-motion` (no camera or explode animation), visib
 One JSON object describes a mockup. Every field is optional except `parts` (and the viewer copes with no manifest at all). Field-by-field reference: [docs/manifest.md](manifest.md). In summary:
 
 - **Page:** `name`, `subtitle`, `eyebrow`, `up` (`"z"` default, or `"y"`), `units` (default `mm`).
-- **Parts:** `id`, `name`, `group`, `material`, `file` (default `<id>.stl`), `scad: { file, defines }`.
+- **Parts:** `id`, `name`, `group`, `material`, `file` (default `<id>.stl`), `scad: { file, defines }`, `hidden` (starts switched off: loaded and listed, unticked), `omit` (left out of the mockup: never fetched or rendered, and not in the view, the Parts panel, groups, the size, explode offsets or Model data, but kept in the manifest as written; wins over `hidden`). If every part is omitted the stage says "Every part in this manifest is left out (omit)." and `mockup build` stops.
 - **Groups**, keyed by id: `label`, `explode: [x, y, z]`, `inside: "hide" | "ghost" | "none"`.
 - **Views:** stock names (`front`, `rear`, `left`, `right`, `top`, `bottom`, `iso`) and custom `{ name, dir: [x, y, z] }`; `defaultView`.
 - **Finishes:** `[{ name, color }]`; the first is the default.
@@ -198,7 +198,7 @@ Swatches come from `finishes` (with manifest-editor edits), or default to Graphi
 Off, X, Y or Z, with a slider for the position across the model (starts at the middle). The cut plane clips every material, including edges.
 
 ### 6.7 Parts panel
-Lists parts by group (groups in order of their first part, both in the edited order: section 6.12), with a visibility checkbox, colour dot, name and triangle count per part. Hovering a row highlights the part. Group headings are shown only when there is more than one group.
+Lists the parts in the mockup (not omitted ones) by group (groups in order of their first part, both in the edited order: section 6.12), with a visibility checkbox, colour dot, name and triangle count per part. A part with `hidden` starts unticked. On pages where editing is allowed (drop-in and embedded, the pages with Arrange) the checkbox is a manifest edit of `hidden` (section 6.12); elsewhere (baked read-only pages, shared mockups) it only changes the view and nothing is remembered. Hovering a row highlights the part. Group headings are shown only when there is more than one group.
 
 ### 6.8 Arrange
 Available on drop-in pages, and on any page while it is embedded. **Arrange** turns the Parts panel into an editor:
@@ -210,7 +210,8 @@ Available on drop-in pages, and on any page while it is embedded. **Arrange** tu
 ### 6.9 The current manifest
 "Copy manifest", `getManifest` and the `change` event all produce the same thing: the loaded manifest with every edit from Arrange and the manifest editor applied (section 6.12):
 - `up` as shown, and the page fields `name`, `subtitle`, `eyebrow`, `units`, `defaultView`.
-- Every part, listed group by group in the shown order (a viewer orders groups by their first part, so this also keeps the group order on reload): `id`, `name`, `group`, `material`, and its source: `file`, or `scad` in the OpenSCAD edition, or the source set in the editor (a part file replaces `scad`; an OpenSCAD source sets `scad: { file, defines }`).
+- Every part, listed group by group in the shown order (a viewer orders groups by their first part, so this also keeps the group order on reload): `id`, `name`, `group`, `material`, `hidden: true` when it starts hidden, and its source: `file`, or `scad` in the OpenSCAD edition, or the source set in the editor (a part file replaces `scad`; an OpenSCAD source sets `scad: { file, defines }`).
+- Then the parts left out of the mockup, with `omit: true`: loaded parts left out by an edit, then the loaded manifest's own omitted parts exactly as written (without `omit` if an edit put them back).
 - Every group that has parts, in the shown order: `label`, `explode` rounded to 0.1, `inside` unless `none`.
 - `views`, `finishes` and `spec` as edited; otherwise as loaded.
 - Any other top-level field as loaded, or as set in Raw JSON. A `defaultView` cleared in Raw JSON is left out.
@@ -225,7 +226,8 @@ One section per `spec` entry (definition list for `rows`, bullets for `items`, a
 - **Layout:** a header (title, model name and part count, close button), a section list, the section being edited, a side panel, and a footer. On screens wider than 760 px the side panel holds the live preview, which is the viewer's own 3D stage moved into the dialog while it is open and moved back on close, and the change list. At 760 px and below the dialog fills the screen, the section list becomes a row of tabs, and the side panel is left out.
 - **Sections:** Page, Parts, Groups, Views, Finishes, Spec sheet, and (after a divider) Raw JSON. Each starts with a plain-language box saying what it controls and "How to use". The section list shows each section's item count and how many changes it has. Text fields apply as you type; adding, removing or switching something redraws the section.
   - **Page:** title (`name`), subtitle, eyebrow, units, and the up axis (Z or Y). Changing the axis turns the model in place and refits the camera.
-  - **Parts:** one card per part, under its group, with its colour dot, name, material and source. **Edit** opens one card at a time: name, id (read-only), group (including "New group…"), material (presets, "From file" for GLB, or a custom colour), and source: a part file, or an OpenSCAD file with defines written as `name = value` pairs (`part = "lid", wall = 3`). A source with no file name or unreadable defines is explained under the fields and not applied. A new source changes the manifest only; the model keeps the shapes already loaded. Hovering a card highlights the part.
+  - **Parts:** one card per part, under its group, with its colour dot, name, material and source. **Edit** opens one card at a time: name, id (read-only), group (including "New group…"), material (presets, "From file" for GLB, or a custom colour), and source: a part file, or an OpenSCAD file with defines written as `name = value` pairs (`part = "lid", wall = 3`). A source with no file name or unreadable defines is explained under the fields and not applied. A new source changes the manifest only; the model keeps the shapes already loaded. **Hidden when the page opens** mirrors the Parts checkbox. **Leave out of the mockup** takes the part out at once (disabled for the last part). Hovering a card highlights the part.
+  - **Left out:** after the groups, a list of the parts left out: loaded ones left out by an edit (unticking brings them straight back), then the manifest's omitted parts, which were never loaded (unticking records "put back" and says the part shows once the files are loaded again). The change list says "<part>: starts hidden" / "starts shown", "<part>: left out" and "<part>: put back". Arrange doesn't offer omit.
   - **Groups:** one card per group: name, exploded offset (X, Y, Z; editing it switches to Exploded), see-inside behaviour (switches to See inside), the parts in it, and **Delete group**, which moves its parts into groups of their own (disabled for a part that is already alone). New groups come from a part's "New group…".
   - **Views:** every listed view, then the hidden stock views. Stock views have a show checkbox; custom views have a name, their direction, **Use current camera** and **Remove**. One "Opens on" choice sets `defaultView` (and moves the camera there). **Add view from current camera** appends a custom view named "View N". The last remaining view can't be hidden or removed.
   - **Finishes:** each swatch's colour picker and name, **Make default** (moves it to the front; the first is marked "Opens with"), **Remove** (not the last one), and **Add finish**. Editing the colour that is showing recolours the model.
@@ -240,7 +242,7 @@ One section per `spec` entry (definition list for `rows`, bullets for `items`, a
 - Arrange and the manifest editor share one set of edits layered on the loaded manifest:
   `{ parts: {id: {name, group, material, source}}, groups: {id: {label, explode, inside}}, page: {name, subtitle, eyebrow, units, up, defaultView, …}, lists: {views, finishes, spec, partOrder} }`.
   `page` can also hold other top-level fields set in Raw JSON; they are written to the manifest as given.
-  A part's `source` is `{ kind: 'file', file }` or `{ kind: 'scad', file, defines }`. A list edit holds the whole edited list. `partOrder` is every part id in the shown order, flattened group by group; parts it doesn't name (none, normally) keep their loaded order after it. Groups have no order of their own: they follow their first part, so moving a group moves its parts in `partOrder`. The loaded manifest itself is never changed; "the current manifest" (6.9) is the two combined.
+  A part's patch can also hold `hidden` and `omit` (`omit: false` on a part the manifest omits means "put back"). A part's `source` is `{ kind: 'file', file }` or `{ kind: 'scad', file, defines }`. A list edit holds the whole edited list. `partOrder` is every part id in the shown order, flattened group by group; parts it doesn't name (none, normally) keep their loaded order after it. Groups have no order of their own: they follow their first part, so moving a group moves its parts in `partOrder`. The loaded manifest itself is never changed; "the current manifest" (6.9) is the two combined.
 - An edit that brings a value back to the loaded one removes it (a part field, a page field, a whole list, the part order), so the change list and the remembered edits stay minimal. Group names (in Arrange and the editor), and Arrange's part fields, still store a value even when it matches; the change list ignores those.
 - Edits are remembered in `localStorage` under `mockupEdits:<manifest name>:<sorted part ids>`, and removed when empty. Edits saved before the `page` and `lists` keys existed still load.
 - **Undo history:** every edit records a snapshot of the edits first. Typing in one field (or one explode axis) within 1.5 seconds counts as one step, and an edit that changes nothing isn't recorded. Up to 200 steps. Undo and Redo are in the editor's footer and cover Arrange's edits too. History starts empty for each model and survives an OpenSCAD re-render of the same parts.
@@ -265,7 +267,7 @@ A page whose address has `#m=<payload>` (a share link) shows the mockup in the l
 - The payload is decoded and checked (format in `lib/share.js`; the viewer's copy is in the "share links" part of `viewer.html`) and loaded through `mockupScad.loadSources(sources, manifest, { main, values, readOnly: true })`, which renders right away.
 - Read-only: Load files, drag-and-drop, Arrange and Edit manifest are hidden (also when framed for embedding). The OpenSCAD panel shows the values with its fields disabled, says "view only", and has no Reset values or Render. The viewing controls all work.
 - Remembered edits (6.12) are neither applied nor saved, so the page shows exactly what was sent.
-- Parts listed in the link's `hidden` start switched off in the Parts panel; their checkboxes still work.
+- Parts with `hidden` in the link's manifest start switched off, and their checkboxes still work, for viewing only; omitted parts aren't there at all.
 - The footer says "Opened from a share link: view only, made with viewer <version>".
 - A damaged link, one made by a newer viewer, or a link opened in the standard edition shows its message in the stage's loading tag; a part that fails to render is reported as usual (7.3).
 - The fragment stays in the address bar, so reloading works; changing it to another link reloads the page.
@@ -306,18 +308,18 @@ Top-level assignments above the first `module` or `function`, in the main file o
 ### 7.5 Share link
 **Share link**, in the OpenSCAD panel beside Reset values and Render, copies a link that holds the current mockup (opening one: section 6.15).
 - Shown only on a top-level `http(s)` page that isn't embedded (`?embed`) or itself a shared mockup. Claude artifacts run in a frame, so they never show it.
-- The link is this page's address (origin and path) plus `#m=<payload>`: `{ v: 1, viewer, manifest, main, sources, values?, hidden? }`, JSON, raw deflate (fflate), base64url, the same format as `mockup link` (8.3).
+- The link is this page's address (origin and path) plus `#m=<payload>`: `{ v: 1, viewer, manifest, main, sources, values? }`, JSON, raw deflate (fflate), base64url, the same format as `mockup link` (8.3).
   - `manifest` is the current manifest (6.9). Every part must have `scad`; otherwise the note names the mesh parts and points to `mockup build`.
   - `sources` starts from the main file and each part's `scad.file` and follows `include`, `use` and `import()` through the loaded sources (the path relative to the including file, then as written, then by base name). Text sources go in as they are; text-format imports (SVG, DXF, OFF, OBJ, DAT, ASCII STL) are decoded as UTF-8. A binary file, a file that isn't loaded, or more than 40 files stops it with a note naming the file.
   - `values` holds the panel values that differ from their defaults, whether or not they have been rendered.
-  - `hidden` lists the ids of parts switched off in the Parts panel. Part visibility isn't part of the manifest (it is view state), so it travels beside it; the camera view, mode, finish and section cut don't travel.
+  - The manifest's `hidden` follows what is showing when Share link is pressed, on any page, so a temporary untick on a read-only page is shared too. Omitted parts travel as written; only the sources the remaining parts need go in. The camera view, mode, finish and section cut don't travel.
 - The link is copied inside the click handler. The note under the buttons gives its size and says anyone with it can see the model and read the full source; above 8 KB it adds that some apps cut long links. Where the clipboard is blocked, the link is shown in a text box, selected. Over 64 KB, nothing is copied and the note points to `mockup build`.
 - Exposed to the add-on as `window.mockupViewer.canShare` and `shareLink()` (returns `{ link, kb, long }` or throws with the message); the add-on supplies `mockupScad.shareData(manifest)`.
 
 ## 8. Node library and CLI
 
 ### 8.1 `buildMockup` (`mockup build`)
-Reads the manifest. For each part: renders its `scad` (unless rendering is off), or finds its file (the manifest path, then the STL folder, then `<id>.stl`); converts ASCII STL to binary; embeds the bytes as base64. Rendered STLs are written to the part's `file` path when it has one and no `--stl-dir` was given, else to `<stl-dir>/<id>.stl`. With `--openscad`, `.scad` sources are embedded as well (by base name) and the runtime files are written next to the output. Rendering stops the build at the first part that produces no geometry. Pages are not drop-in by default.
+Reads the manifest. Omitted parts are skipped (not rendered or embedded) and kept in the page's manifest as written. For each other part: renders its `scad` (unless rendering is off), or finds its file (the manifest path, then the STL folder, then `<id>.stl`); converts ASCII STL to binary; embeds the bytes as base64. Rendered STLs are written to the part's `file` path when it has one and no `--stl-dir` was given, else to `<stl-dir>/<id>.stl`. With `--openscad`, `.scad` sources are embedded as well (by base name) and the runtime files are written next to the output. Rendering stops the build at the first part that produces no geometry. Pages are not drop-in by default.
 
 ### 8.2 `renderPart` (`mockup render`)
 - **wasm** (default): a fresh WebAssembly OpenSCAD per attempt. Files under the root folder (default: the `.scad` file's folder) are copied into its file system: only OpenSCAD-relevant extensions, at most 5 folders deep, at most 60 MB in total, skipping `node_modules`, `.git`, `dist`, `.cache`, `build` and hidden folders. `--lib` folders are mounted and added to `OPENSCADPATH`. Manifold first, then one classic retry.
@@ -331,7 +333,7 @@ Reads the manifest. For each part: renders its `scad` (unless rendering is off),
 | `mockup build <manifest> -o <out.html>` | Section 8.1. Flags: `--drop-in`, `--openscad`, `--stl-dir`, `--no-render`, `--engine wasm\|native`, `--lib` (repeatable), `--root`, `--title`, `--embed-origin` (repeatable). Warns above 14 MB. |
 | `mockup init [dir]` | Creates `dir` (default `./mockup`) with a starter `manifest.json` and an empty `viewer.html`. Refuses if the manifest exists. `--scad <file>` fills parts from the file's part selector (else one `model` part), with materials guessed from names and files under `stl/`. `--openscad`, `--embed-origin`. |
 | `mockup viewer <dir>` | Writes the empty viewer (and the OpenSCAD runtime with `--openscad`). Used to refresh a project after upgrading. `--embed-origin`. |
-| `mockup link <manifest> [--base <url>] [--lib <dir>]` | Prints a share link (7.5) to stdout, and its size and a privacy reminder to stderr. Every part must have `scad`. Sources are keyed by their path relative to the manifest; includes are followed relative to the including file, then in each `--lib` folder (stored at the path where the include resolves). Text-format imports (SVG, DXF, OFF, OBJ, DAT, ASCII STL) go in as text; a binary import, a missing file, more than 40 files or a link over 64 KB stops it with a message. A note above 8 KB. `--base` defaults to `https://sirmeili.github.io/3d-mockup-viewer/openscad/viewer.html`. |
+| `mockup link <manifest> [--base <url>] [--lib <dir>]` | Prints a share link (7.5) to stdout, and its size and a privacy reminder to stderr. Every part that isn't omitted must have `scad`; omitted parts (mesh ones too) travel in the manifest as written, and their sources stay out unless another part needs them. Sources are keyed by their path relative to the manifest; includes are followed relative to the including file, then in each `--lib` folder (stored at the path where the include resolves). Text-format imports (SVG, DXF, OFF, OBJ, DAT, ASCII STL) go in as text; a binary import, a missing file, more than 40 files or a link over 64 KB stops it with a message. A note above 8 KB. `--base` defaults to `https://sirmeili.github.io/3d-mockup-viewer/openscad/viewer.html`. |
 | `mockup render <file.scad> -o <out.stl>` | Renders one STL. `-D name=value` (JSON values, else strings), `--engine`, `--lib`. |
 | `mockup serve [dir] [--port 8080]` | Static file server for development. GET only, no CORS headers, `index.html` for folders. |
 | `mockup help`, `mockup version` | Usage and version. |
@@ -385,6 +387,7 @@ Full reference: [docs/embedding.md](embedding.md). The design rules:
 - `npm run test:browser` (Playwright, about 6 minutes; needs a build and Chromium):
   - Every dist page (demo, OpenSCAD demo, URL mode in both editions) at 1200 px and 400 px, light and dark. Checks: title, no warnings, no horizontal scroll, the canvas is actually drawn (distinct-colour count), exploded and see-inside views, a section cut, Arrange showing one box per group with visible labels, no console errors. On the OpenSCAD demo at desktop/light, a value change and a full re-render.
   - Manifest editor, at desktop/light and phone/dark: opening it (the stage moves into the preview on desktop and still draws), Page edits applied as you type, the change list and count, Undo, Redo, Reset section, Esc and the stage moving back; no sideways scroll. Arrange edits appear in the editor's change list and undo. Parts (read-only id, material, group, source with its error messages), Groups (offset, Delete group and its undo), the up axis, Views (hide, add from camera, opens on), Finishes (recolour, add, make default) and the Spec sheet (rename, switch type, add section, change-list wording), each checked in the copied manifest. Reordering: arrow keys on a grip (focus stays with the moved item), a mouse drag of a part into another group and of a view to the front, group Move down, a finish moved by arrow key, a spec row moved by arrow key, and a touch drag (pointer events with `pointerType: 'touch'`) of a spec section to the top; the copied manifest's part, group, finish, view and spec order; Reset all restores the loaded order. Raw JSON: Edit manifest sits in the header; the box starts with the current manifest; broken JSON gives one problem with its line and Go to line selects it; an unknown part, a missing part, an unknown material and a 2-number `explode` are each explained, with the line; a good edit applies (title, material, explode, finish order) and shows in the change list and the box; one Undo reverts it; Paste, Format and Revert. Every section, Raw JSON included, on a phone in dark mode without sideways scroll.
+  - Part visibility, through URL mode with a manifest that hides one part and omits another: the omitted part's file is never fetched and it isn't listed or counted; the hidden part is listed unticked; ticking it is a change ("starts shown"); Leave out in the editor, the Left out list, putting back a never-loaded part, the copied manifest, undo; Raw JSON lists the omitted part, explains a non-boolean `hidden`, and applies `hidden` and `omit`. The share-link test also leaves a part out and checks the recipient never sees it, and that a checkbox on a shared mockup remembers nothing.
   - `<mockup-embed>`, at desktop/light and phone/dark on a page of 20 (classic `embed.js` from a second server): the first goes live and draws with only its chosen controls; its link points at the full viewer; `load="click"` waits and starts on a click; `controls="none"` shows no strip; a missing manifest shows the error; no sideways scroll; never more than 8 live; after scrolling to the bottom, the top embeds hold a JPEG still and no iframe while the bottom ones are live.
   - Compact mode at 600 × 340 in dark mode: only the stage and the chosen controls show, the starting mode, view and finish apply, the model draws, and the page fits its frame both ways; `controls=none` hides the strip.
   - Share links: on the OpenSCAD demo at desktop/light, a changed value and a part switched off, Share link, the copied link decoded by the Node decoder, and the link opened in a fresh page once the sender's page is closed (two software-WebGL pages at once make screenshots flaky); it renders with the value and the part off, read-only: no editing controls, locked fields, "view only" notes, no sideways scroll). A `mockup link` link opened at phone/dark. Damaged, newer-version and standard-edition links show their message. No Share link inside a frame; the clipboard fallback; a mesh part refused with its name.
@@ -415,6 +418,7 @@ The project's code is MIT. The OpenSCAD WebAssembly build is GPL-2.0-or-later: t
 - The editor tests run at desktop/light and phone/dark only, not every width and theme.
 - `?manifest=`, `?model=`, `?parent=` and `?embed` (with its options) don't work inside Claude artifacts.
 - The OpenSCAD edition needs http(s), not `file://`.
+- Putting back a part the manifest omitted only shows it after the files are loaded again, because it was never loaded. Arrange's Reset also clears `hidden` and `omit` edits, like every part edit.
 - Share links carry OpenSCAD text sources only: no mesh parts and no binary imports (PNG, binary STL), at most 40 files and 64 KB of link. Some apps cut links well before that.
 - A share link opens in whatever viewer its address serves; GitHub Pages serves only the latest release, so a newer OpenSCAD engine can render an old link slightly differently.
 - Share link isn't offered inside Claude artifacts or other frames, and a shared mockup can't be edited or shared again.
@@ -425,7 +429,7 @@ The project's code is MIT. The OpenSCAD WebAssembly build is GPL-2.0-or-later: t
 
 ## 12. Planned work
 
-Roughly in priority order. When picking one up, check the notes, update this section in the same change, and add browser tests for anything visible. Numbers stay as first given, so references keep working: done items are removed and their behaviour moves into the sections above (2, editing the spec sheet and page text, and 4, the manifest editor, are both in section 6.11; 5, the inline embed, is in sections 6.13 and 9.1; 7, share links, is in sections 6.15, 7.5 and 8.3, with the owner's decisions of 2026-10-26: GitHub Pages and self-hosted only, read-only on opening, text sources only, an 8 KB note and a 64 KB cap, links always open in the latest viewer and the risk of OpenSCAD engine upgrades is accepted, no embedding-API command).
+Roughly in priority order. When picking one up, check the notes, update this section in the same change, and add browser tests for anything visible. Numbers stay as first given, so references keep working: done items are removed and their behaviour moves into the sections above (2, editing the spec sheet and page text, and 4, the manifest editor, are both in section 6.11; 5, the inline embed, is in sections 6.13 and 9.1; 7, share links, is in sections 6.15, 7.5 and 8.3, with the owner's decisions of 2026-10-26: GitHub Pages and self-hosted only, read-only on opening, text sources only, an 8 KB note and a 64 KB cap, links always open in the latest viewer and the risk of OpenSCAD engine upgrades is accepted, no embedding-API command; 8, part visibility (`hidden`, `omit`), is in sections 5.1, 6.7, 6.9, 6.11 and 6.12, decided 2026-10-26: omitted parts are skipped entirely, and both can be set in the viewer).
 
 ### 1. Load models from a URL without a manifest
 - `viewer.html?file=stl/base.stl&file=stl/lid.stl` (repeatable). Each file becomes a part with automatic grouping, explode and materials.
@@ -445,43 +449,6 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 
 ### 6. Static image of a mockup (for places that strip scripts)
 Have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer, e.g. in a GitHub README. Node has no WebGL, so decide first how to render: a small software rasterizer in Node (no new dependency, plainer look) or headless Chromium through Playwright when installed (exact match, optional dependency and browser download). Split out of item 5 on 2026-10-24.
-
-### 8. Part visibility in the manifest: `hidden` and `omit`
-Two optional part fields, so a manifest (and so a share link) can say which parts show. Added 2026-10-26; owner's decisions the same day: omitted parts are skipped entirely, both fields can be set in the viewer as well as the manifest, and this replaces the share link's separate `hidden` list (section 7.5), which hasn't been released.
-
-- **`"hidden": true`:** the part starts switched off. It is loaded, listed in the Parts panel with its checkbox unticked, and counted in the size and Model data. Anyone can tick it back on.
-- **`"omit": true`:** the part is left out of the mockup. It is never fetched or rendered, and isn't in the 3D view, the Parts panel, groups, the overall size, explode offsets or Model data. It stays in the manifest, so Copy manifest, `getManifest`, the `change` event and share links keep it as written. `omit` wins over `hidden`.
-- **Loading:**
-  - Baked pages: `mockup build` doesn't render or embed omitted parts.
-  - URL mode: their files aren't fetched.
-  - The OpenSCAD edition: they aren't rendered.
-  - Load files: their files are ignored if dropped.
-  - If every part is omitted, the stage says "Every part in this manifest is left out (omit)."
-- **Setting `hidden` in the viewer:**
-  - On pages where editing is allowed (drop-in and embedded, the pages that show Arrange), the Parts checkbox is a manifest edit. It is undoable, listed in the change list ("Light pipes: starts hidden" / "starts shown"), remembered in the browser, and written by Copy manifest as `"hidden": true`. A part that starts shown has no `hidden` field.
-  - On other pages (baked read-only pages, shared mockups) the checkbox stays a temporary viewing aid, as now.
-- **Setting `omit` in the viewer:**
-  - The manifest editor's part card gets **Leave out of the mockup**. Ticking it removes the part from the page at once and records the edit ("Light pipes: left out").
-  - Omitted parts are listed at the end of the Parts section under "Left out", with name and source. Unticking there records the edit ("Light pipes: put back"), but the part only appears once the files are loaded again, because it was never loaded; the card says so, like a changed source does.
-  - Arrange doesn't offer omit: it is a manifest decision, not a viewing one.
-- **The part card** also gets **Hidden when the page opens**, which mirrors the Parts checkbox.
-- **Raw JSON:** `hidden` and `omit` must be `true` or `false`. A part that the loaded manifest omits may be listed although it isn't loaded. Every loaded part must still be listed, either shown or with `"omit": true`.
-- **Share links:**
-  - The packed manifest carries both fields. Share link sets `hidden` from what is shown at that moment, on any page, so a temporary untick on a read-only page is shared too.
-  - Sources only needed by omitted parts are left out of the link.
-  - `mockup link` passes both fields through and skips omitted parts' sources.
-  - The payload's separate `hidden` list is removed.
-- **Docs:** both fields go in docs/manifest.md. On completion, update sections 5.1, 6.7, 6.9, 6.11, 6.12, 6.15, 7.5, 8.1 and 8.3.
-- **Tests:**
-  - Node:
-    - `mockup build` skips omitted parts but keeps them in the page's manifest.
-    - `mockup link` keeps both fields and drops omitted-only sources.
-  - Browser:
-    - A manifest with a hidden part (listed, unticked, not drawn) and an omitted part (not listed, not counted, not fetched in URL mode).
-    - The Parts checkbox as an edit on the demo: change list, undo, Copy manifest. On a baked read-only page it stays temporary.
-    - Leave out and put back in the editor.
-    - Raw JSON accepts an omitted part that isn't loaded.
-    - A share link carries both fields, and the recipient sees the hidden part unticked and the omitted part nowhere.
 
 ### Outside this repository
 - **Tracker integration** (`ai-project-tracker`): decide where a project's mockup lives and how an item shows one, then use the embedding API. The tracker has no mockup or file storage yet; this belongs in its own backlog.

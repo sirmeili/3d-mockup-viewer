@@ -664,7 +664,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
   // ---------- model state ----------
   const state = {
-    manifest: {}, parts: [], groups: new Map(), up: 'z', units: 'mm',
+    // loaded: every part read from the files; parts: the ones in the mockup (not left out by an "omit" edit)
+    manifest: {}, parts: [], loaded: [], groups: new Map(), up: 'z', units: 'mm',
     assembledBox: new THREE.Box3(), radius: 50, maxExplode: 0,
     mode: 'assembled', explodeNow: 0, explodeTarget: 0, insideNow: 0, insideTarget: 0,
     cutAxis: 'off', cutT: 0.5, triTotal: 0, signature: '', edits: { parts: {}, groups: {} }, arranging: false,
@@ -684,9 +685,9 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'part'; }
 
   function clearModel() {
-    state.parts.forEach((p) => { p.mesh.geometry.dispose(); p.mesh.material.dispose(); if (p.edges) p.edges.geometry.dispose(); });
+    state.loaded.forEach((p) => { p.mesh.geometry.dispose(); p.mesh.material.dispose(); if (p.edges) p.edges.geometry.dispose(); });
     while (assembly.children.length) assembly.remove(assembly.children[0]);
-    state.parts = []; state.groups = new Map(); state.triTotal = 0;
+    state.parts = []; state.loaded = []; state.groups = new Map(); state.triTotal = 0;
     warnings.length = 0; statusEl.textContent = '';
   }
 
@@ -707,9 +708,10 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const specs = []; // {id,name,group,material,file}
     (mf.parts || []).forEach((p) => {
       const file = p.file || (p.id + '.stl');
+      if (p.omit) { used.add(file); return; } // left out of the mockup: never read, and its file isn't an extra part
       if (!files[file]) { warn('Missing file for "' + (p.name || p.id) + '" (' + file + ').'); return; }
       used.add(file);
-      specs.push({ id: p.id || slug(p.name || file), name: p.name, group: p.group, material: p.material, file });
+      specs.push({ id: p.id || slug(p.name || file), name: p.name, group: p.group, material: p.material, hidden: !!p.hidden, file });
     });
     fileNames.filter((f) => !used.has(f)).forEach((f) => specs.push({ file: f, auto: true }));
 
@@ -730,13 +732,16 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
         state.triTotal += tris;
         state.parts.push({
           id, name, baseName: name, matKey, baseMat: matKey, origMaterial: pc.material || null, mesh, edges: null,
-          groupId: null, baseGroup: s.group || id, namedGroup: !!s.group, file: s.file, tris, visible: true
+          groupId: null, baseGroup: s.group || id, namedGroup: !!s.group, file: s.file, tris, visible: true, baseHidden: !!s.hidden
         });
       });
     }
+    state.loaded = state.parts.slice();
     if (!state.parts.length) {
-      $('loading').hidden = false; $('loading').textContent = 'No parts could be loaded.'; renderPanels();
-      if (!hostBusy) setTimeout(() => postToHost('error', { code: 'no-parts', message: 'No parts could be loaded.', warnings: warnings.slice() }), 0);
+      const allOmitted = (mf.parts || []).length && (mf.parts || []).every((p) => p.omit);
+      const message = allOmitted ? 'Every part in this manifest is left out (omit).' : 'No parts could be loaded.';
+      $('loading').hidden = false; $('loading').textContent = message; renderPanels();
+      if (!hostBusy) setTimeout(() => postToHost('error', { code: 'no-parts', message, warnings: warnings.slice() }), 0);
       return;
     }
 
@@ -795,9 +800,17 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const mf = state.manifest, ed = state.edits;
     state.groups.forEach((g) => assembly.remove(g.obj));
     state.groups = new Map();
+    // parts left out by an edit drop out of everything; the size and triangle count follow the parts that stay
+    state.parts = state.loaded.filter((p) => !(ed.parts[p.id] || {}).omit);
+    state.triTotal = state.parts.reduce((n, p) => n + p.tris, 0);
+    state.assembledBox.makeEmpty();
+    state.parts.forEach((p) => state.assembledBox.union(p.mesh.geometry.boundingBox));
     orderedParts().forEach((p) => {
       const pe = ed.parts[p.id] || {};
       p.name = pe.name || p.baseName;
+      // "starts hidden" from the manifest or an edit; a checkbox untick on a read-only page isn't undone by a redraw
+      const hid = pe.hidden !== undefined ? pe.hidden : p.baseHidden;
+      if (hid !== p.appliedHidden) { p.visible = !hid; p.appliedHidden = hid; }
       const mk = pe.material || p.baseMat;
       if (mk !== p.matKey) {
         const old = p.mesh.material; p.mesh.material = makeMaterial(mk, p.origMaterial); old.dispose(); p.matKey = mk;
@@ -897,6 +910,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     arrange(); renderHeader(); updateDims(); buildViewButtons(); buildFinishes(); renderSheet(); updateCut();
     if (turned) goView(views().some((v) => viewName(v) === current) ? current : viewName(views()[0]), true);
   }
+  function canEdit() { return !$('arrBox').hidden; } // drop-in and embedded pages, not shared mockups or compact mode
   function editPart(id, patch) { applyEdit(null, (ed) => { ed.parts[id] = Object.assign({}, ed.parts[id], patch); }); }
   function editGroup(id, patch) { applyEdit(null, (ed) => { ed.groups[id] = Object.assign({}, ed.groups[id], patch); }); }
 
@@ -1031,7 +1045,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   }
   function setFinishColor(color) {
     finishHex = color.toLowerCase();
-    state.parts.forEach((p) => { if (p.matKey === 'finish') p.mesh.material.color.copy(lin(finishHex)); });
+    state.loaded.forEach((p) => { if (p.matKey === 'finish') p.mesh.material.color.copy(lin(finishHex)); });
   }
   function pickFinish(color) {
     setFinishColor(color);
@@ -1048,7 +1062,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     clipping.length = 0;
     if (axis !== 'off') clipping.push(cutPlane);
     updateCut();
-    state.parts.forEach((p) => { p.mesh.material.needsUpdate = true; });
+    state.loaded.forEach((p) => { p.mesh.material.needsUpdate = true; });
     edgeMat.needsUpdate = true;
   }
   function updateCut() {
@@ -1156,7 +1170,11 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
         const row = document.createElement(arranging ? 'div' : 'label'); row.className = 'prow';
         const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = p.visible; cb.id = 'part-' + p.id;
         cb.setAttribute('aria-label', 'Show ' + p.name);
-        cb.addEventListener('change', () => { p.visible = cb.checked; applyPose(); });
+        // where editing is allowed (the pages with Arrange) the tick is the manifest's "hidden"; elsewhere it's just for viewing
+        cb.addEventListener('change', () => {
+          if (canEdit()) applyEdit(null, (ed) => setPartEdit(ed, p, 'hidden', !cb.checked, p.baseHidden));
+          else { p.visible = cb.checked; applyPose(); }
+        });
         const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = swatchHex(p);
         if (arranging) {
           const nm = document.createElement('input'); nm.type = 'text'; nm.className = 'pname-in'; nm.id = 'p-name-' + p.id; nm.value = p.name;
@@ -1202,6 +1220,10 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     $('arrCopy').hidden = !arranging;
   }
 
+  // the loaded manifest's parts marked "omit": never loaded, so they only exist as manifest entries
+  function omittedBase() {
+    return (state.manifest.parts || []).filter((p) => p.omit).map((p) => (p.id ? p : Object.assign({}, p, { id: slug(p.name || p.file || 'part') })));
+  }
   // manifest describing the current arrangement, ready to save next to the part files
   function currentManifest() {
     const mf = state.manifest;
@@ -1222,7 +1244,23 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       const src = (state.edits.parts[p.id] || {}).source;
       if (src && src.kind === 'scad') o.scad = { file: src.file, defines: src.defines || {} };
       else if (src) { o.file = src.file; delete o.scad; }
+      if (p.appliedHidden) o.hidden = true; else delete o.hidden;
+      delete o.omit;
       return o;
+    });
+    // parts left out of the mockup stay in the manifest, after the others: loaded ones left out by an edit,
+    // then the manifest's own omitted parts (never loaded) unless an edit puts them back
+    state.loaded.filter((p) => !state.parts.includes(p)).forEach((p) => {
+      const o = Object.assign({}, baseParts[p.id] || {}, { id: p.id, name: p.name, group: p.groupId || p.baseGroup, material: p.matKey });
+      if (!o.scad) o.file = p.file;
+      if (p.appliedHidden) o.hidden = true; else delete o.hidden;
+      o.omit = true;
+      out.parts.push(o);
+    });
+    omittedBase().forEach((bp) => {
+      const o = JSON.parse(JSON.stringify(bp));
+      if ((state.edits.parts[bp.id] || {}).omit === false) delete o.omit;
+      out.parts.push(o);
     });
     out.groups = {};
     state.groups.forEach((g) => {
@@ -1468,7 +1506,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     ['name', 'subtitle', 'eyebrow', 'units'].forEach((k) => { if (k in M && typeof M[k] !== 'string') fail(1, lineOf('"' + k + '"'), '"' + k + '" must be text in quotes.'); });
 
     // parts
-    const loaded = state.parts.map((p) => p.id);
+    const loaded = state.loaded.map((p) => p.id);
+    const neverLoaded = omittedBase().map((p) => p.id); // omitted in the loaded manifest, so listed without being loaded
     if (!Array.isArray(M.parts)) fail(2, lineOf('"parts"'), '"parts" must be a list, [ … ], with one entry for each loaded part.');
     else {
       const seen = new Set();
@@ -1477,13 +1516,14 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
         const line = idAt(mp.id);
         if (seen.has(mp.id)) fail(2, line, 'Part "' + mp.id + '" is listed twice. List each part once.');
         seen.add(mp.id);
-        const p = state.parts.find((q) => q.id === mp.id);
-        if (!p) fail(2, line, 'There is no loaded part "' + mp.id + '". Parts can\'t be added here, because their shapes come from the loaded files. Check the spelling, or remove it. Loaded ids: ' + loaded.join(', ') + '.');
+        const p = state.loaded.find((q) => q.id === mp.id);
+        if (!p && !neverLoaded.includes(mp.id)) fail(2, line, 'There is no loaded part "' + mp.id + '". Parts can\'t be added here, because their shapes come from the loaded files. Check the spelling, or remove it. Loaded ids: ' + loaded.join(', ') + '.');
         if ('name' in mp && typeof mp.name !== 'string') fail(2, line, 'Part "' + mp.id + '": "name" must be text.');
         if ('file' in mp && typeof mp.file !== 'string') fail(2, line, 'Part "' + mp.id + '": "file" must be text, like "lid.stl".');
         if ('scad' in mp && (!mp.scad || typeof mp.scad.file !== 'string' || ('defines' in mp.scad && (typeof mp.scad.defines !== 'object' || Array.isArray(mp.scad.defines)))))
           fail(2, line, 'Part "' + mp.id + '": "scad" needs a "file", and optional "defines", like { "file": "case.scad", "defines": { "part": "lid" } }.');
         if ('group' in mp && typeof mp.group !== 'string') fail(4, line, 'Part "' + mp.id + '": "group" must be a group id in quotes.');
+        ['hidden', 'omit'].forEach((f) => { if (f in mp && typeof mp[f] !== 'boolean') fail(2, line, 'Part "' + mp.id + '": "' + f + '" must be true or false.'); });
         if ('material' in mp) {
           const m = mp.material;
           const ok = typeof m === 'string' && (PRESETS[m] || /^#?[0-9a-f]{6}$/i.test(m) || (m === 'keep' && p && p.origMaterial));
@@ -1491,7 +1531,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
             : 'Part "' + mp.id + '": the material ' + JSON.stringify(m) + ' isn\'t known. Use one of ' + Object.keys(PRESETS).join(', ') + ', or a colour like "#3a3e41".');
         }
       });
-      loaded.filter((id) => !seen.has(id)).forEach((id) => fail(2, lineOf('"parts"'), 'Loaded part "' + id + '" is missing. Parts can\'t be removed here; put it back. (To hide it, untick it in the parts list.)'));
+      loaded.filter((id) => !seen.has(id)).forEach((id) => fail(2, lineOf('"parts"'), 'Loaded part "' + id + '" is missing. Parts can\'t be removed here; put it back. (To start it hidden, set "hidden": true; to leave it out of the mockup, set "omit": true.)'));
+      if (loaded.length && loaded.every((id) => M.parts.some((mp) => mp && mp.id === id && mp.omit === true))) fail(2, lineOf('"parts"'), 'Every loaded part has "omit": true. Keep at least one part in the mockup.');
     }
 
     // groups
@@ -1568,15 +1609,19 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     if (!same(fin, baseFinishes())) ed.lists.finishes = fin;
     if (!same(M.spec || [], base.spec || [])) ed.lists.spec = M.spec || [];
     M.parts.forEach((mp) => {
-      const p = state.parts.find((q) => q.id === mp.id);
+      const p = state.loaded.find((q) => q.id === mp.id);
+      if (!p) { setPartEdit(ed, mp, 'omit', !!mp.omit, true); return; } // omitted and never loaded: only "omit" can change
+      setPartEdit(ed, p, 'hidden', !!mp.hidden, p.baseHidden);
+      setPartEdit(ed, p, 'omit', !!mp.omit, false);
       setPartEdit(ed, p, 'name', mp.name || p.baseName, p.baseName);
       setPartEdit(ed, p, 'group', mp.group || p.id, p.baseGroup);
       setPartEdit(ed, p, 'material', mp.material || p.baseMat, p.baseMat);
       const src = mp.scad ? { kind: 'scad', file: mp.scad.file, defines: mp.scad.defines || {} } : mp.file ? { kind: 'file', file: mp.file } : null;
       if (src) setPartEdit(ed, p, 'source', src, baseSource(p));
     });
-    const order = M.parts.map((x) => x.id);
-    if (!same(order, state.parts.map((p) => p.id))) ed.lists.partOrder = order;
+    const kept = (id) => state.loaded.some((p) => p.id === id) && !M.parts.some((x) => x.id === id && x.omit);
+    const order = M.parts.map((x) => x.id).filter(kept);
+    if (!same(order, state.loaded.map((p) => p.id).filter(kept))) ed.lists.partOrder = order;
     Object.keys(M.groups || {}).forEach((gid) => {
       const g = M.groups[gid], b = (base.groups && base.groups[gid]) || {}, cur = state.groups.get(gid), e = {};
       if (g.label !== undefined && g.label !== b.label && !(cur && b.label === undefined && cur.label === g.label)) e.label = g.label;
@@ -1782,6 +1827,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       g.parts.forEach((p, i) => list.appendChild(edPartCard(p, i, g)));
       host.appendChild(list);
     });
+    edLeftOut(host);
   }
   function edPartCard(p, i, g) {
     const open = edOpenPart === p.id;
@@ -1871,9 +1917,54 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     file.addEventListener('input', () => setSource('part:' + p.id + ':file'));
     defs.addEventListener('input', () => setSource('part:' + p.id + ':defs'));
 
+    // "hidden" mirrors the parts-list checkbox; "omit" takes the part out of the mockup (it moves to Left out)
+    const toggle = (idp, checked, text, onChange) => {
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = idp + p.id; cb.checked = checked;
+      cb.addEventListener('change', () => onChange(cb.checked));
+      const lab = document.createElement('label'); lab.className = 'toggle wide'; lab.append(cb, text);
+      return { cb, lab };
+    };
+    const hid = toggle('ed-part-hidden-', !!p.appliedHidden, 'Hidden when the page opens',
+      (on) => applyEdit(null, (ed) => setPartEdit(ed, p, 'hidden', on, p.baseHidden)));
+    const om = toggle('ed-part-omit-', false, 'Leave out of the mockup', () => {
+      edOpenPart = null;
+      applyEdit(null, (ed) => setPartEdit(ed, p, 'omit', true, false));
+      edRender();
+    });
+    om.cb.disabled = state.parts.length === 1; // a mockup keeps at least one part
+
     grid.append(fld('Part name', nm, true), fld('Id (fixed)', id, true), fld('Moves with group', gs, true), fld('Colour / material', mwrap, true),
-      fld('Source', kind, true), fld('File', file, true), defsFld, err);
+      fld('Source', kind, true), fld('File', file, true), defsFld, err, hid.lab, om.lab);
     return grid;
+  }
+  // Parts left out of the mockup: loaded ones left out by an edit (unticking brings them straight back), and the
+  // manifest's own omitted parts, which were never loaded (unticking records it; they show once the files are loaded again)
+  function edLeftOut(host) {
+    const srcText = (s) => (s.kind === 'scad' ? s.file + (definesText(s.defines) ? ' (' + definesText(s.defines) + ')' : '') : s.file);
+    const items = state.loaded.filter((p) => !state.parts.includes(p)).map((p) => ({ id: p.id, name: p.name, src: partSource(p), loaded: true }))
+      .concat(omittedBase().map((bp) => ({
+        id: bp.id, name: bp.name || bp.id, loaded: false,
+        src: bp.scad ? { kind: 'scad', file: bp.scad.file, defines: bp.scad.defines || {} } : { kind: 'file', file: bp.file || bp.id + '.stl' }
+      })));
+    if (!items.length) return;
+    const list = el('div'); list.className = 'ed-list'; list.id = 'ed-left-out';
+    const head = el('div'); head.className = 'fl';
+    head.append(el('span', 'Left out'), el('span', items.length + (items.length === 1 ? ' part' : ' parts')));
+    list.appendChild(head);
+    items.forEach((x) => {
+      const card = el('div'); card.className = 'ed-card';
+      const row = el('div'); row.className = 'ed-row';
+      const out = x.loaded || (state.edits.parts[x.id] || {}).omit !== false;
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'ed-omit-' + x.id; cb.checked = out;
+      cb.addEventListener('change', () => { applyEdit(null, (ed) => setPartEdit(ed, x, 'omit', cb.checked, !x.loaded)); edRender(); });
+      const lab = document.createElement('label'); lab.className = 'toggle grow'; lab.append(cb, 'Leave out: ' + x.name);
+      const where = el('span', srcText(x.src)); where.className = 'meta mono';
+      row.append(lab, where);
+      card.appendChild(row);
+      if (!x.loaded && !out) { const n = el('p', 'Put back. It shows once the files are loaded again, because it was never loaded.'); n.className = 'meta'; card.appendChild(n); }
+      list.appendChild(card);
+    });
+    host.appendChild(list);
   }
 
   // ----- Groups -----
@@ -2165,13 +2256,16 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     PAGE_FIELDS.forEach(([k, label, dflt]) => {
       if (k in ed.page && ed.page[k] !== (mf[k] || '')) add('page', label + ': ' + q(mf[k] || dflt) + ' → ' + q(ed.page[k] || dflt));
     });
-    state.parts.forEach((p) => {
+    state.loaded.forEach((p) => {
       const e = ed.parts[p.id];
       if (!e) return;
       if (e.name !== undefined && e.name !== p.baseName) add('parts', p.baseName + ' renamed to ' + e.name);
       if (e.group !== undefined && e.group !== p.baseGroup) add('parts', p.name + ': ' + groupLabel(p.baseGroup) + ' → ' + groupLabel(e.group));
       if (e.material !== undefined && e.material !== p.baseMat) add('parts', p.name + ': ' + mat(p.baseMat) + ' → ' + mat(e.material));
+      if (e.hidden !== undefined && e.hidden !== p.baseHidden) add('parts', p.name + ': starts ' + (e.hidden ? 'hidden' : 'shown'));
+      if (e.omit) add('parts', p.name + ': left out');
     });
+    omittedBase().forEach((bp) => { if ((ed.parts[bp.id] || {}).omit === false) add('parts', (bp.name || bp.id) + ': put back'); });
     Object.keys(ed.groups).forEach((gid) => {
       const g = state.groups.get(gid);
       if (!g) return; // no parts in it any more
@@ -2189,7 +2283,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       if (e.inside !== undefined && e.inside !== base.inside) add('groups', g.label + ': see inside ' + (INSIDE_LABELS[base.inside] || 'automatic') + ' → ' + INSIDE_LABELS[e.inside]);
     });
     if ('up' in ed.page && ed.page.up !== state.baseUp) add('page', 'Up axis: ' + state.baseUp.toUpperCase() + ' → ' + ed.page.up.toUpperCase());
-    state.parts.forEach((p) => {
+    state.loaded.forEach((p) => {
       const src = (ed.parts[p.id] || {}).source;
       if (src) add('parts', p.name + ': source → ' + src.file + (src.kind === 'scad' && definesText(src.defines) ? ' (' + definesText(src.defines) + ')' : ''));
     });
@@ -2294,7 +2388,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const mUrl = new URL(spec, location.href);
     $('loading').hidden = false; $('loading').textContent = 'Loading ' + mUrl.pathname.split('/').pop() + '…';
     const mf = await fetchOk(mUrl, 'json');
-    const parts = mf.parts || [];
+    const parts = (mf.parts || []).filter((p) => !p.omit); // omitted parts are never fetched or rendered
     const wantScad = window.mockupScad && parts.some((p) => p.scad);
     const files = {};
     const needRender = [];
@@ -2366,7 +2460,6 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     if (names.some((n) => typeof p.sources[n] !== 'string')) throw bad('The link is damaged: a source file is not text.');
     if (typeof p.main !== 'string' || p.sources[p.main] === undefined) throw bad('The link is damaged: its main OpenSCAD file is missing.');
     if (p.values !== undefined && !isObj(p.values)) throw bad('The link is damaged: its values are not valid.');
-    if (p.hidden !== undefined && !(Array.isArray(p.hidden) && p.hidden.every((h) => typeof h === 'string'))) throw bad('The link is damaged: its hidden parts are not valid.');
     return p;
   }
   async function loadShared(str) {
@@ -2376,11 +2469,6 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     try { p = decodeShare(str); } catch (e) { fatal(e.message); return; }
     $('foot').textContent += ' Opened from a share link: view only' + (p.viewer ? ', made with viewer ' + p.viewer : '') + '.';
     await window.mockupScad.loadSources(p.sources, p.manifest, { main: p.main, values: p.values || {}, readOnly: true });
-    // parts the sender had switched off start off here too (the Parts checkboxes still work)
-    if (p.hidden && p.hidden.length) {
-      state.parts.forEach((part) => { if (p.hidden.includes(part.id)) part.visible = false; });
-      renderParts(); applyPose();
-    }
   }
   // pasting another share link into the address bar only changes the fragment; start over with it
   window.addEventListener('hashchange', () => {
@@ -2467,13 +2555,17 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   function shareLink() {
     if (!window.mockupScad || !window.mockupScad.shareData || !state.parts.length) throw new Error('Load an OpenSCAD model first.');
     const mf = currentManifest();
-    const meshes = mf.parts.filter((p) => !p.scad);
+    // what is showing right now, even a temporary untick on a page without editing, is what the recipient starts with
+    mf.parts.forEach((mp) => {
+      const p = state.parts.find((q) => q.id === mp.id);
+      if (!p) return;
+      if (p.visible) delete mp.hidden; else mp.hidden = true;
+    });
+    const meshes = mf.parts.filter((p) => !p.scad && !p.omit);
     if (meshes.length) throw new Error('Share links can only carry OpenSCAD parts; ' + meshes.map((p) => p.name || p.id).join(', ') + (meshes.length === 1 ? ' is a mesh file' : ' are mesh files') + '. Use mockup build to make a single HTML file instead.');
     const d = window.mockupScad.shareData(mf);
     const payload = { v: SHARE_VERSION, viewer: (document.querySelector('meta[name="mockup-viewer-version"]') || {}).content || null, manifest: mf, main: d.main, sources: d.sources };
     if (Object.keys(d.values).length) payload.values = d.values;
-    const hidden = state.parts.filter((p) => !p.visible).map((p) => p.id);
-    if (hidden.length) payload.hidden = hidden;
     const link = location.origin + location.pathname + '#m=' + encodeShare(payload);
     const kb = (link.length / 1024).toFixed(1);
     if (link.length > SHARE_MAX_LENGTH) throw new Error('The link would be ' + kb + ' KB; share links stop at ' + SHARE_MAX_LENGTH / 1024 + ' KB. Use mockup build to make a single HTML file instead.');
