@@ -81,8 +81,8 @@ The template has three markers that the build relies on:
 
 ### 3.3 Script interfaces between pieces
 
-- The viewer exposes `window.mockupViewer`: `buildModel(manifest, files, opts)`, `warn(msg)`, `clearWarnings()`, `setLoading(text)`, and getters `manifest` and `partCount`. Editions use it.
-- The OpenSCAD add-on exposes `window.mockupScad`: `init(scad, manifest)`, `loadFiles(scadFiles, otherFiles, manifest)`, `loadSources(sources, manifest, opts)` (opts: `main`, `values`, `readOnly`, used by share links), `partScad(id)`, `setValues(values)`, `render()`. The viewer calls these when present and otherwise behaves as the standard edition.
+- The viewer exposes `window.mockupViewer`: `buildModel(manifest, files, opts)`, `warn(msg)`, `clearWarnings()`, `setLoading(text)`, `shareLink()`, `canShare`, and getters `manifest` and `partCount`. Editions use it.
+- The OpenSCAD add-on exposes `window.mockupScad`: `init(scad, manifest)`, `loadFiles(scadFiles, otherFiles, manifest)`, `shareData(manifest)`, `loadSources(sources, manifest, opts)` (opts: `main`, `values`, `readOnly`, used by share links), `partScad(id)`, `setValues(values)`, `render()`. The viewer calls these when present and otherwise behaves as the standard edition.
 - The add-on script runs before the viewer script (the slot comes first in the page), so `window.mockupScad` exists when the viewer starts.
 
 ### 3.4 Data flow
@@ -300,6 +300,16 @@ Top-level assignments above the first `module` or `function`, in the main file o
 - Dropped `.scad` files: rendered immediately.
 - Share link: sources from the link, rendered immediately with the link's values; read-only (6.15).
 
+### 7.5 Share link
+**Share link**, in the OpenSCAD panel beside Reset values and Render, copies a link that holds the current mockup (planned item 7; opening one: section 6.15).
+- Shown only on a top-level `http(s)` page that isn't embedded (`?embed`) or itself a shared mockup. Claude artifacts run in a frame, so they never show it.
+- The link is this page's address (origin and path) plus `#m=<payload>`: `{ v: 1, viewer, manifest, main, sources, values? }`, JSON, raw deflate (fflate), base64url, the same format as `mockup link` (8.3).
+  - `manifest` is the current manifest (6.9). Every part must have `scad`; otherwise the note names the mesh parts and points to `mockup build`.
+  - `sources` starts from the main file and each part's `scad.file` and follows `include`, `use` and `import()` through the loaded sources (the path relative to the including file, then as written, then by base name). Text sources go in as they are; text-format imports (SVG, DXF, OFF, OBJ, DAT, ASCII STL) are decoded as UTF-8. A binary file, a file that isn't loaded, or more than 40 files stops it with a note naming the file.
+  - `values` holds the panel values that differ from their defaults, whether or not they have been rendered.
+- The link is copied inside the click handler. The note under the buttons gives its size and says anyone with it can see the model and read the full source; above 8 KB it adds that some apps cut long links. Where the clipboard is blocked, the link is shown in a text box, selected. Over 64 KB, nothing is copied and the note points to `mockup build`.
+- Exposed to the add-on as `window.mockupViewer.canShare` and `shareLink()` (returns `{ link, kb, long }` or throws with the message); the add-on supplies `mockupScad.shareData(manifest)`.
+
 ## 8. Node library and CLI
 
 ### 8.1 `buildMockup` (`mockup build`)
@@ -444,7 +454,7 @@ One link that holds the manifest and the OpenSCAD sources, for sending a design 
   - Above 8 KB, a note: "Some apps cut long links; check it opens before sending."
   - Above 64 KB, Share link refuses and points to `mockup build`. Chrome itself accepts about 2 MB.
 - **What can't go in:** STL, 3MF and GLB parts, because a mesh is about 50 bytes per triangle, far too big for a link. A mockup whose parts aren't all OpenSCAD-rendered can't be shared this way; the button says why and points to `mockup build` (a single HTML file) instead.
-- **Making a link (viewer):** a **Share link** button in the OpenSCAD edition, next to Copy manifest (in Arrange and in the manifest editor's footer). It is enabled when every part comes from `scad` and all sources are loaded. The link points to the page's own address (origin and path), so another project's copy makes links to itself. The button copies the link inside the click handler (rule 2). If the clipboard is blocked, it shows the link in a text box, the same way Copy manifest does. It also shows the link's length and a one-line reminder that anyone with the link can read the full source.
+- **Making a link (viewer):** built: section 7.5. Placed in the OpenSCAD panel rather than beside Copy manifest, because Arrange's Copy manifest only shows while arranging; and always enabled, explaining on press when a model can't be shared, since a disabled button can't say why.
 - **Making a link (CLI):** built: `mockup link` (section 8.3) and `lib/share.js` (3.1). The `enclosure-mockup` skill can print a share link next to the page it builds.
 - **Opening a link, read-only:** built: section 6.15.
 - **Version drift:** GitHub Pages serves only the latest release, so a link always opens in the newest viewer. Effects:

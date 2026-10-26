@@ -39,6 +39,8 @@
 .param .chk { display: inline-flex; align-items: center; gap: 8px; font: 400 13.5px var(--font-mono); padding: 6px 0; }
 .param .chk input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 .params-empty { margin: 0; color: var(--muted); font-size: 13.5px; }
+.scad-share { display: grid; gap: 8px; }
+.scad-share p { margin: 0; color: var(--muted); font-size: 13.5px; }
 .scad details summary { cursor: pointer; color: var(--muted); font-size: 13.5px; }
 .scad pre {
   margin: 8px 0 0; max-height: 260px; overflow: auto; font: 400 12px/1.5 var(--font-mono);
@@ -53,9 +55,14 @@
       <p class="scad-meta" id="scadMeta"></p>
     </div>
     <div class="scad-actions">
+      <button class="btn" type="button" id="scadShare" hidden>Share link</button>
       <button class="btn" type="button" id="scadReset">Reset values</button>
       <button class="btn primary" type="button" id="scadRender">Render</button>
     </div>
+  </div>
+  <div class="scad-share" id="scadShareBox" hidden>
+    <p id="scadShareNote" role="status"></p>
+    <textarea id="scadShareText" class="arr-json" readonly hidden aria-label="Share link"></textarea>
   </div>
   <details class="pbox" id="scadParamsBox" open>
     <summary>Parameters <span class="pcount" id="scadCount"></span></summary>
@@ -178,6 +185,7 @@
     else meta.append(' · renders as one part (no part selector found)');
     if (S.readOnly) meta.append(' · view only');
     $('scadReset').hidden = $('scadRender').hidden = S.readOnly;
+    $('scadShare').hidden = S.readOnly || !(window.mockupViewer && window.mockupViewer.canShare);
     const host = $('scadParams'); host.textContent = '';
     const params = S.params.filter((p) => p.name !== S.partVar);
     const box = $('scadParamsBox');
@@ -253,6 +261,24 @@
     return wrap;
   }
   $('scadReset').addEventListener('click', () => { S.params.forEach((p) => { p.value = p.def; }); renderPanel(); });
+  // Share link: the viewer packs the current manifest with shareData() into a link; copy it, or show it to copy by hand
+  $('scadShare').addEventListener('click', async () => {
+    const note = $('scadShareNote'), box = $('scadShareText');
+    $('scadShareBox').hidden = false;
+    let res;
+    try { res = window.mockupViewer.shareLink(); } catch (e) { note.textContent = e.message; box.hidden = true; return; }
+    const size = ' (' + res.kb + ' KB)';
+    const after = ' Anyone with the link can see the model and read its full OpenSCAD source.' + (res.long ? ' Some apps cut long links; check it opens before sending.' : '');
+    box.value = res.link;
+    try {
+      await navigator.clipboard.writeText(res.link);
+      note.textContent = 'Link copied' + size + '.' + after;
+      box.hidden = true;
+    } catch (e) {
+      note.textContent = 'Copy is blocked here. Select the link below and copy it' + size + '.' + after;
+      box.hidden = false; box.focus(); box.select();
+    }
+  });
   $('scadRender').addEventListener('click', () => render());
 
   // ---------- engine ----------
@@ -403,8 +429,19 @@
     }
   }
 
+  // a source as text for a share link, or null for a binary file
+  function shareText(name, v) {
+    if (typeof v === 'string') return v;
+    const e = (name.split('.').pop() || '').toLowerCase();
+    if (!['scad', 'svg', 'dxf', 'off', 'obj', 'dat', 'stl'].includes(e)) return null;
+    let t;
+    try { t = new TextDecoder('utf-8', { fatal: true }).decode(v); } catch (err) { return null; }
+    return e === 'stl' && !/^\s*solid\b/.test(t) ? null : t;
+  }
+
   function setup(sources, main, manifest) {
     S.sources = sources; S.main = main; S.manifest = manifest;
+    $('scadShareBox').hidden = true; $('scadShareText').hidden = true;
     const src = text(sources[main]);
     S.params = parseParams(src);
     const pv = detectPartVar(src);
@@ -441,6 +478,32 @@
       return { values: out };
     },
     render() { return render(); },
+    // share links: the text sources the manifest's parts reach (include, use, import), and the changed values.
+    // Throws with a message for people when something can't go in a link.
+    shareData(mf) {
+      if (!S.main) throw new Error('No OpenSCAD model is loaded.');
+      const sources = {};
+      const queue = [S.main].concat((mf.parts || []).map((p) => p.scad && p.scad.file).filter(Boolean));
+      for (let i = 0; i < queue.length; i++) {
+        const name = queue[i];
+        if (sources[name] !== undefined) continue;
+        if (Object.keys(sources).length >= 40) throw new Error('This model needs more than 40 files, more than a share link can hold. Use mockup build for it instead.');
+        const v = S.sources[name];
+        if (v === undefined) throw new Error(name + ' is not loaded, so the model can’t go in a link.');
+        const t = shareText(name, v);
+        if (t === null) throw new Error(name + ' is a binary file; share links carry text files only. Use mockup build for this model instead.');
+        sources[name] = t;
+        if (!/\.scad$/i.test(name)) continue;
+        const dir = name.includes('/') ? name.slice(0, name.lastIndexOf('/') + 1) : '';
+        refs(t).forEach((r) => {
+          const k = [dir + r, normalizePath(dir + r), r, base(r)].find((c) => S.sources[c] !== undefined) || normalizePath(dir + r);
+          if (!queue.includes(k)) queue.push(k);
+        });
+      }
+      const values = {};
+      S.params.forEach((p) => { if (p.name !== S.partVar && p.value !== p.def) values[p.name] = p.value; });
+      return { main: S.main, sources, values };
+    },
     // embedded sample: STLs are already baked in, so show the parameters without rendering
     init(scad, manifest) {
       if (!scad || !scad.sources) return;

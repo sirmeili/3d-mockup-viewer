@@ -2452,8 +2452,25 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     clearWarnings() { warnings.length = 0; statusEl.textContent = ''; },
     setLoading(text) { $('loading').hidden = !text; if (text) $('loading').textContent = text; },
     get manifest() { return state.manifest; },
-    get partCount() { return state.parts.length; }
+    get partCount() { return state.parts.length; },
+    // Share link is offered only on a top-level http(s) page: not inside Claude artifacts (framed), embeds or shared mockups
+    canShare: window.parent === window && /^https?:$/.test(location.protocol) && !embedMode && !shared,
+    shareLink
   };
+  // the current mockup as a share link to this page; throws with a message for people
+  function shareLink() {
+    if (!window.mockupScad || !window.mockupScad.shareData || !state.parts.length) throw new Error('Load an OpenSCAD model first.');
+    const mf = currentManifest();
+    const meshes = mf.parts.filter((p) => !p.scad);
+    if (meshes.length) throw new Error('Share links can only carry OpenSCAD parts; ' + meshes.map((p) => p.name || p.id).join(', ') + (meshes.length === 1 ? ' is a mesh file' : ' are mesh files') + '. Use mockup build to make a single HTML file instead.');
+    const d = window.mockupScad.shareData(mf);
+    const payload = { v: SHARE_VERSION, viewer: (document.querySelector('meta[name="mockup-viewer-version"]') || {}).content || null, manifest: mf, main: d.main, sources: d.sources };
+    if (Object.keys(d.values).length) payload.values = d.values;
+    const link = location.origin + location.pathname + '#m=' + encodeShare(payload);
+    const kb = (link.length / 1024).toFixed(1);
+    if (link.length > SHARE_MAX_LENGTH) throw new Error('The link would be ' + kb + ' KB; share links stop at ' + SHARE_MAX_LENGTH / 1024 + ' KB. Use mockup build to make a single HTML file instead.');
+    return { link, kb, long: link.length > SHARE_NOTE_LENGTH };
+  }
 
   // ---------- embedding API: a host page drives the viewer in an iframe (docs/embedding.md) ----------
   function modelSummary() {
