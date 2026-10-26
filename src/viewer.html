@@ -441,7 +441,10 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   let DATA = null;
   try { DATA = JSON.parse($('mockup-data').textContent); } catch (e) { DATA = null; }
   const embedMode = document.documentElement.hasAttribute('data-embed'); // compact mode (?embed)
-  const dropIn = !embedMode && (!DATA || DATA.dropIn !== false);
+  // a share link (#m=…) carries its own model and opens read-only (see "share links" below)
+  const shareData = (/[#&]m=([^&]*)/.exec(location.hash) || [])[1] || null;
+  const shared = !!shareData;
+  const dropIn = !embedMode && !shared && (!DATA || DATA.dropIn !== false);
 
   // ---------- embedding: allowed parent origins ----------
   // Off unless the page lists the origins allowed to drive it: at build time (the mockup-embed-origins meta tag)
@@ -858,12 +861,13 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   }
   function loadEdits() {
     let e = null;
+    if (shared) return normEdits(null); // a shared mockup shows exactly what was sent
     try { e = JSON.parse(localStorage.getItem(editsKey()) || 'null'); } catch (err) { e = null; }
     return normEdits(e);
   }
   function editsEmpty(e) { return EDIT_KEYS.every((k) => !Object.keys(e[k]).length); }
   function saveEdits() {
-    try { if (editsEmpty(state.edits)) localStorage.removeItem(editsKey()); else localStorage.setItem(editsKey(), JSON.stringify(state.edits)); } catch (err) { /* storage unavailable */ }
+    if (!shared) try { if (editsEmpty(state.edits)) localStorage.removeItem(editsKey()); else localStorage.setItem(editsKey(), JSON.stringify(state.edits)); } catch (err) { /* storage unavailable */ }
     hostChanged();
     edChanged();
   }
@@ -2324,7 +2328,62 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     pending.forEach(warn);
     if (sources && Object.keys(sources).length) window.mockupScad.init({ main: parts.find((p) => p.scad).scad.file, sources }, mf);
   }
+  // ---------- share links ----------
+  // A mockup's manifest and OpenSCAD sources packed into the URL fragment: JSON, raw deflate, base64url.
+  // The same format as lib/share.js (the mockup link command); keep the checks in step.
+  const SHARE_VERSION = 1, SHARE_NOTE_LENGTH = 8 * 1024, SHARE_MAX_LENGTH = 64 * 1024, SHARE_MAX_FILES = 40, SHARE_MAX_BYTES = 5 * 1024 * 1024;
+  function toB64url(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function encodeShare(payload) {
+    return toB64url(fflate.deflateSync(new TextEncoder().encode(JSON.stringify(payload)), { level: 9 }));
+  }
+  function decodeShare(str) {
+    if (typeof fflate === 'undefined') throw new Error('The unzip library did not load, so the link could not be opened.');
+    if (!/^[A-Za-z0-9_-]+$/.test(str)) throw new Error('The link is damaged: its data has characters a share link never uses.');
+    if (str.length > SHARE_MAX_LENGTH) throw new Error('The link is longer than share links can be.');
+    let json;
+    try {
+      const out = fflate.inflateSync(new Uint8Array(b64ToBuf(str.replace(/-/g, '+').replace(/_/g, '/'))));
+      if (out.length > SHARE_MAX_BYTES) throw new Error('too big');
+      json = new TextDecoder().decode(out);
+    } catch (e) { throw new Error('The link is damaged or cut short: its data could not be unpacked.'); }
+    let p;
+    try { p = JSON.parse(json); } catch (e) { throw new Error('The link is damaged: its data is not valid.'); }
+    return checkShare(p);
+  }
+  function checkShare(p) {
+    const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+    const bad = (m) => new Error(m);
+    if (!isObj(p) || !Number.isInteger(p.v)) throw bad('The link is damaged: its data is not a mockup.');
+    if (p.v > SHARE_VERSION) throw bad('This link was made with a newer viewer' + (p.viewer ? ' (' + p.viewer + ')' : '') + '. Open it in the latest viewer.');
+    if (!isObj(p.manifest) || !Array.isArray(p.manifest.parts)) throw bad('The link is damaged: it has no manifest.');
+    if (!isObj(p.sources)) throw bad('The link is damaged: it has no OpenSCAD sources.');
+    const names = Object.keys(p.sources);
+    if (!names.length || names.length > SHARE_MAX_FILES) throw bad('The link must hold between 1 and ' + SHARE_MAX_FILES + ' source files; it has ' + names.length + '.');
+    if (names.some((n) => typeof p.sources[n] !== 'string')) throw bad('The link is damaged: a source file is not text.');
+    if (typeof p.main !== 'string' || p.sources[p.main] === undefined) throw bad('The link is damaged: its main OpenSCAD file is missing.');
+    if (p.values !== undefined && !isObj(p.values)) throw bad('The link is damaged: its values are not valid.');
+    return p;
+  }
+  async function loadShared(str) {
+    const fatal = (msg) => { $('loading').hidden = false; $('loading').textContent = msg; $('title').textContent = 'Shared mockup'; };
+    if (!window.mockupScad) { fatal('This is a share link for an OpenSCAD mockup. Open it in the OpenSCAD edition of the viewer.'); return; }
+    let p;
+    try { p = decodeShare(str); } catch (e) { fatal(e.message); return; }
+    $('foot').textContent += ' Opened from a share link: view only' + (p.viewer ? ', made with viewer ' + p.viewer : '') + '.';
+    await window.mockupScad.loadSources(p.sources, p.manifest, { main: p.main, values: p.values || {}, readOnly: true });
+  }
+  // pasting another share link into the address bar only changes the fragment; start over with it
+  window.addEventListener('hashchange', () => {
+    const next = (/[#&]m=([^&]*)/.exec(location.hash) || [])[1] || null;
+    if (next !== shareData) location.reload();
+  });
+
   async function loadEmbedded() {
+    if (shared) { await loadShared(shareData); return; }
     const fromUrl = (!DATA || !DATA.files) ? manifestParam() : null;
     if (fromUrl) { await loadFromUrl(fromUrl); return; }
     if (!DATA || !DATA.files) {
@@ -2503,7 +2562,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   let hostQueue = null;
   function startEmbedding(initialLoad) {
     if (!embedOrigins.length) return;
-    if (!embedMode) { $('arrBox').hidden = false; $('edBox').hidden = false; }
+    if (!embedMode && !shared) { $('arrBox').hidden = false; $('edBox').hidden = false; }
     hostQueue = initialLoad.then(() => postToHost('ready', {
       edition: window.mockupScad ? 'openscad' : 'standard',
       viewerVersion: (document.querySelector('meta[name="mockup-viewer-version"]') || {}).content || null,

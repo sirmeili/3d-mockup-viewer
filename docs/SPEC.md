@@ -82,7 +82,7 @@ The template has three markers that the build relies on:
 ### 3.3 Script interfaces between pieces
 
 - The viewer exposes `window.mockupViewer`: `buildModel(manifest, files, opts)`, `warn(msg)`, `clearWarnings()`, `setLoading(text)`, and getters `manifest` and `partCount`. Editions use it.
-- The OpenSCAD add-on exposes `window.mockupScad`: `init(scad, manifest)`, `loadFiles(scadFiles, otherFiles, manifest)`, `loadSources(sources, manifest)`, `partScad(id)`, `setValues(values)`, `render()`. The viewer calls these when present and otherwise behaves as the standard edition.
+- The OpenSCAD add-on exposes `window.mockupScad`: `init(scad, manifest)`, `loadFiles(scadFiles, otherFiles, manifest)`, `loadSources(sources, manifest, opts)` (opts: `main`, `values`, `readOnly`, used by share links), `partScad(id)`, `setValues(values)`, `render()`. The viewer calls these when present and otherwise behaves as the standard edition.
 - The add-on script runs before the viewer script (the slot comes first in the page), so `window.mockupScad` exists when the viewer starts.
 
 ### 3.4 Data flow
@@ -165,6 +165,7 @@ A manifest part whose file yields several pieces (a multi-object 3MF or GLB) bec
 | URL | `viewer.html?manifest=<path>` (`?model=` is an alias) when the page has no baked files | Fetches the manifest, then each part's `file` relative to it. In the OpenSCAD edition it also fetches `.scad` sources (following `include`, `use` and `import()`; at most 40 files) and renders any part whose STL is missing. |
 | Load files / drag-and-drop | Only on drop-in pages (empty viewers, demo pages, `--drop-in` builds) | Reads local files; nothing leaves the browser. A `.json` file is the manifest. `.scad` files go to the OpenSCAD edition, or produce a warning in the standard edition. |
 | Embedding API | Host sends `load` | Manifest URL, or manifest plus files as bytes or URLs (section 9). |
+| Share link | `#m=<payload>` in the address (planned item 7) | OpenSCAD edition only; replaces any baked model. Opens read-only (section 6.15). |
 
 Each new load replaces the current model. If a load produces no parts, the stage says "No parts could be loaded." and the warnings say why.
 
@@ -257,6 +258,15 @@ What `<mockup-embed>` (9.1) and plain iframes show: `viewer.html?embed&manifest=
 - Non-fatal problems (missing or unreadable files, skipped file types, OpenSCAD parts that failed) are listed in the warning line under the controls.
 - If three.js fails to load, the stage says so and nothing else runs.
 
+### 6.15 Shared mockups (`#m=`)
+A page whose address has `#m=<payload>` (a share link, planned item 7) shows the mockup in the link instead of any baked model:
+- The payload is decoded and checked (format in `lib/share.js`; the viewer's copy is in the "share links" part of `viewer.html`) and loaded through `mockupScad.loadSources(sources, manifest, { main, values, readOnly: true })`, which renders right away.
+- Read-only: Load files, drag-and-drop, Arrange and Edit manifest are hidden (also when framed for embedding). The OpenSCAD panel shows the values with its fields disabled, says "view only", and has no Reset values or Render. The viewing controls all work.
+- Remembered edits (6.12) are neither applied nor saved, so the page shows exactly what was sent.
+- The footer says "Opened from a share link: view only, made with viewer <version>".
+- A damaged link, one made by a newer viewer, or a link opened in the standard edition shows its message in the stage's loading tag; a part that fails to render is reported as usual (7.3).
+- The fragment stays in the address bar, so reloading works; changing it to another link reloads the page.
+
 ## 7. OpenSCAD edition
 
 The OpenSCAD edition is the same viewer with `src/scad-addon.html` inserted, plus runtime files next to the page: `openscad.js` (about 11 MB), `scad-worker.js`, `fonts/` and `OPENSCAD-COPYING.txt`. It needs http(s); `file://` can't load the worker.
@@ -288,6 +298,7 @@ Top-level assignments above the first `module` or `function`, in the main file o
 - Baked demo page: STLs are embedded, so the panel shows values without rendering.
 - URL mode: STLs are fetched; any part with `scad` and no STL triggers a render of all parts.
 - Dropped `.scad` files: rendered immediately.
+- Share link: sources from the link, rendered immediately with the link's values; read-only (6.15).
 
 ## 8. Node library and CLI
 
@@ -435,12 +446,7 @@ One link that holds the manifest and the OpenSCAD sources, for sending a design 
 - **What can't go in:** STL, 3MF and GLB parts, because a mesh is about 50 bytes per triangle, far too big for a link. A mockup whose parts aren't all OpenSCAD-rendered can't be shared this way; the button says why and points to `mockup build` (a single HTML file) instead.
 - **Making a link (viewer):** a **Share link** button in the OpenSCAD edition, next to Copy manifest (in Arrange and in the manifest editor's footer). It is enabled when every part comes from `scad` and all sources are loaded. The link points to the page's own address (origin and path), so another project's copy makes links to itself. The button copies the link inside the click handler (rule 2). If the clipboard is blocked, it shows the link in a text box, the same way Copy manifest does. It also shows the link's length and a one-line reminder that anyone with the link can read the full source.
 - **Making a link (CLI):** built: `mockup link` (section 8.3) and `lib/share.js` (3.1). The `enclosure-mockup` skill can print a share link next to the page it builds.
-- **Opening a link:** any OpenSCAD-edition page that finds `#m=` at start decodes the payload and shows it instead of any baked model. It loads through `mockupScad.loadSources(sources, manifest)` as URL mode does, applies `values` and renders. The fragment stays in the address bar, so reloading works. Failures go to the warning line: corrupt data, a version newer than this viewer, a missing include, or a link opened in the standard edition ("open this link in the OpenSCAD viewer").
-- **Read-only when opened from a link:** for now a shared mockup can be looked at but not changed.
-  - Load files, drag-and-drop, Arrange, Edit manifest and Share link are hidden.
-  - The OpenSCAD panel shows the values with its fields disabled and no Render button.
-  - The viewing controls still work: show modes, views, finishes, section cut and Edges.
-  - Remembered edits (section 6.12) are neither applied nor saved. Otherwise the recipient's own earlier edits to a manifest with the same name would change what they were sent.
+- **Opening a link, read-only:** built: section 6.15.
 - **Version drift:** GitHub Pages serves only the latest release, so a link always opens in the newest viewer. Effects:
   - The payload format is covered: newer viewers keep reading old `v` values.
   - Manifest fields already stay backward compatible.

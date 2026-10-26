@@ -77,7 +77,7 @@
   const dropTxt = document.querySelector('#drop small');
   if (dropTxt) dropTxt.textContent = '.scad files (plus any files they include or import), or STL, 3MF and GLB parts';
 
-  const S = { sources: {}, main: null, manifest: null, partVar: null, partValues: [], params: [], rendering: false, rendered: false };
+  const S = { sources: {}, main: null, manifest: null, partVar: null, partValues: [], params: [], rendering: false, rendered: false, readOnly: false };
 
   // ---------- parsing ----------
   const NUM = /^-?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
@@ -176,6 +176,8 @@
     if (S.manifest && S.manifest.parts && S.manifest.parts.some((p) => p.scad)) meta.append(' · ' + S.manifest.parts.length + ' parts from the manifest');
     else if (S.partVar) { meta.append(' · parts from '); meta.append(code(S.partVar)); meta.append(': ' + S.partValues.join(', ')); }
     else meta.append(' · renders as one part (no part selector found)');
+    if (S.readOnly) meta.append(' · view only');
+    $('scadReset').hidden = $('scadRender').hidden = S.readOnly;
     const host = $('scadParams'); host.textContent = '';
     const params = S.params.filter((p) => p.name !== S.partVar);
     const box = $('scadParamsBox');
@@ -219,6 +221,7 @@
     lab.append(nm);
     if (nm.textContent.toLowerCase().replace(/ /g, '_') !== p.name.toLowerCase()) { const raw = document.createElement('code'); raw.textContent = p.name; lab.append(raw); }
     let input;
+    const lock = () => { input.disabled = S.readOnly; };
     const mark = () => { wrap.classList.toggle('changed', p.value !== p.def); updateCount(); };
     if (p.type === 'bool') {
       const box = document.createElement('label'); box.className = 'chk';
@@ -244,6 +247,7 @@
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') render(); });
       wrap.append(lab, input);
     }
+    lock();
     if (p.desc) { const s = document.createElement('small'); s.textContent = p.desc; wrap.appendChild(s); }
     mark();
     return wrap;
@@ -449,13 +453,19 @@
       for (const k in otherFiles) sources[k] = new Uint8Array(otherFiles[k]);
       return this.loadSources(sources, manifest);
     },
-    // sources: {relativePath: text | Uint8Array}; renders right away
-    async loadSources(sources, manifest) {
-      const main = pickMain(sources);
+    // sources: {relativePath: text | Uint8Array}; renders right away.
+    // opts (share links): main file, starting values {name: value}, readOnly (fields locked, no Render)
+    async loadSources(sources, manifest, opts = {}) {
+      const main = opts.main && sources[opts.main] !== undefined ? opts.main : pickMain(sources);
+      S.readOnly = !!opts.readOnly;
       const useManifest = manifest && manifest.parts && manifest.parts.some((p) => p.scad) ? manifest : (manifest ? Object.assign({}, manifest, { parts: (manifest.parts || []).filter((p) => !p.file || /\.scad$/i.test(p.file)) }) : null);
       window.mockupViewer.clearWarnings();
       S.rendered = false;
       setup(sources, main, useManifest);
+      const values = opts.values || {};
+      const set = S.params.filter((q) => q.name !== S.partVar && Object.prototype.hasOwnProperty.call(values, q.name) && typeof values[q.name] === typeof q.def);
+      set.forEach((q) => { q.value = values[q.name]; });
+      if (set.length) renderPanel();
       await render();
     }
   };
