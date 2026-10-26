@@ -446,6 +446,43 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 ### 6. Static image of a mockup (for places that strip scripts)
 Have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer, e.g. in a GitHub README. Node has no WebGL, so decide first how to render: a small software rasterizer in Node (no new dependency, plainer look) or headless Chromium through Playwright when installed (exact match, optional dependency and browser download). Split out of item 5 on 2026-10-24.
 
+### 8. Part visibility in the manifest: `hidden` and `omit`
+Two optional part fields, so a manifest (and so a share link) can say which parts show. Added 2026-10-26; owner's decisions the same day: omitted parts are skipped entirely, both fields can be set in the viewer as well as the manifest, and this replaces the share link's separate `hidden` list (section 7.5), which hasn't been released.
+
+- **`"hidden": true`:** the part starts switched off. It is loaded, listed in the Parts panel with its checkbox unticked, and counted in the size and Model data. Anyone can tick it back on.
+- **`"omit": true`:** the part is left out of the mockup. It is never fetched or rendered, and isn't in the 3D view, the Parts panel, groups, the overall size, explode offsets or Model data. It stays in the manifest, so Copy manifest, `getManifest`, the `change` event and share links keep it as written. `omit` wins over `hidden`.
+- **Loading:**
+  - Baked pages: `mockup build` doesn't render or embed omitted parts.
+  - URL mode: their files aren't fetched.
+  - The OpenSCAD edition: they aren't rendered.
+  - Load files: their files are ignored if dropped.
+  - If every part is omitted, the stage says "Every part in this manifest is left out (omit)."
+- **Setting `hidden` in the viewer:**
+  - On pages where editing is allowed (drop-in and embedded, the pages that show Arrange), the Parts checkbox is a manifest edit. It is undoable, listed in the change list ("Light pipes: starts hidden" / "starts shown"), remembered in the browser, and written by Copy manifest as `"hidden": true`. A part that starts shown has no `hidden` field.
+  - On other pages (baked read-only pages, shared mockups) the checkbox stays a temporary viewing aid, as now.
+- **Setting `omit` in the viewer:**
+  - The manifest editor's part card gets **Leave out of the mockup**. Ticking it removes the part from the page at once and records the edit ("Light pipes: left out").
+  - Omitted parts are listed at the end of the Parts section under "Left out", with name and source. Unticking there records the edit ("Light pipes: put back"), but the part only appears once the files are loaded again, because it was never loaded; the card says so, like a changed source does.
+  - Arrange doesn't offer omit: it is a manifest decision, not a viewing one.
+- **The part card** also gets **Hidden when the page opens**, which mirrors the Parts checkbox.
+- **Raw JSON:** `hidden` and `omit` must be `true` or `false`. A part that the loaded manifest omits may be listed although it isn't loaded. Every loaded part must still be listed, either shown or with `"omit": true`.
+- **Share links:**
+  - The packed manifest carries both fields. Share link sets `hidden` from what is shown at that moment, on any page, so a temporary untick on a read-only page is shared too.
+  - Sources only needed by omitted parts are left out of the link.
+  - `mockup link` passes both fields through and skips omitted parts' sources.
+  - The payload's separate `hidden` list is removed.
+- **Docs:** both fields go in docs/manifest.md. On completion, update sections 5.1, 6.7, 6.9, 6.11, 6.12, 6.15, 7.5, 8.1 and 8.3.
+- **Tests:**
+  - Node:
+    - `mockup build` skips omitted parts but keeps them in the page's manifest.
+    - `mockup link` keeps both fields and drops omitted-only sources.
+  - Browser:
+    - A manifest with a hidden part (listed, unticked, not drawn) and an omitted part (not listed, not counted, not fetched in URL mode).
+    - The Parts checkbox as an edit on the demo: change list, undo, Copy manifest. On a baked read-only page it stays temporary.
+    - Leave out and put back in the editor.
+    - Raw JSON accepts an omitted part that isn't loaded.
+    - A share link carries both fields, and the recipient sees the hidden part unticked and the omitted part nowhere.
+
 ### Outside this repository
 - **Tracker integration** (`ai-project-tracker`): decide where a project's mockup lives and how an item shows one, then use the embedding API. The tracker has no mockup or file storage yet; this belongs in its own backlog.
 
