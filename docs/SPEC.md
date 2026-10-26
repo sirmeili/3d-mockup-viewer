@@ -59,12 +59,13 @@ The project turns 3D-printable enclosure designs into interactive, shareable moc
 | `lib/scad.js` | `renderPart`: render a `.scad` file to binary STL with the bundled WebAssembly OpenSCAD or a native `openscad`. |
 | `lib/stl.js` | ASCII-to-binary STL conversion and triangle counting. |
 | `lib/edition.js` | Copies the OpenSCAD runtime files (`openscad.js`, worker, fonts, licence) next to an OpenSCAD-edition page. |
+| `lib/share.js` | Share links (planned item 7): `gatherShare` (manifest and `.scad` sources to a payload), `encodeShare` / `decodeShare` (raw deflate and base64url, with the payload checks), `shareLink`. The viewer has its own copy of the encoder and decoder. |
 | `lib/index.js` | Package entry; re-exports the library. |
 | `cli/mockup.js` | The `mockup` command. |
 | `scripts/build-dist.js` | Builds `dist/`. |
 | `examples/sensor-box/` | The sample model (`manifest.json` + `sensor_box.scad`), used by the demo pages and tests. |
 | `vendor/fonts/` | Liberation Sans (regular, bold, italic, bold italic), Mono and Serif, for OpenSCAD `text()`. |
-| `test/` | `build.test.js` (Node) and `browser/smoke.test.js` (Playwright), plus `browser/embed-host.html`. |
+| `test/` | `build.test.js` and `share.test.js` (Node), and `browser/smoke.test.js` (Playwright), plus `browser/embed-host.html`. |
 
 ### 3.2 Template markers
 
@@ -305,6 +306,7 @@ Reads the manifest. For each part: renders its `scad` (unless rendering is off),
 | `mockup build <manifest> -o <out.html>` | Section 8.1. Flags: `--drop-in`, `--openscad`, `--stl-dir`, `--no-render`, `--engine wasm\|native`, `--lib` (repeatable), `--root`, `--title`, `--embed-origin` (repeatable). Warns above 14 MB. |
 | `mockup init [dir]` | Creates `dir` (default `./mockup`) with a starter `manifest.json` and an empty `viewer.html`. Refuses if the manifest exists. `--scad <file>` fills parts from the file's part selector (else one `model` part), with materials guessed from names and files under `stl/`. `--openscad`, `--embed-origin`. |
 | `mockup viewer <dir>` | Writes the empty viewer (and the OpenSCAD runtime with `--openscad`). Used to refresh a project after upgrading. `--embed-origin`. |
+| `mockup link <manifest> [--base <url>] [--lib <dir>]` | Prints a share link (planned item 7) to stdout, and its size and a privacy reminder to stderr. Every part must have `scad`. Sources are keyed by their path relative to the manifest; includes are followed relative to the including file, then in each `--lib` folder (stored at the path where the include resolves). Text-format imports (SVG, DXF, OFF, OBJ, DAT, ASCII STL) go in as text; a binary import, a missing file, more than 40 files or a link over 64 KB stops it with a message. A note above 8 KB. `--base` defaults to `https://sirmeili.github.io/3d-mockup-viewer/openscad/viewer.html`. |
 | `mockup render <file.scad> -o <out.stl>` | Renders one STL. `-D name=value` (JSON values, else strings), `--engine`, `--lib`. |
 | `mockup serve [dir] [--port 8080]` | Static file server for development. GET only, no CORS headers, `index.html` for folders. |
 | `mockup help`, `mockup version` | Usage and version. |
@@ -312,7 +314,7 @@ Reads the manifest. For each part: renders its `scad` (unless rendering is off),
 **Compatibility rule:** existing commands and flags keep working across releases. New flags are additive. The `enclosure-mockup` skill must be updated in the same change if that ever can't hold.
 
 ### 8.4 Package exports
-- `3d-mockup-viewer`: `buildMockup`, `renderPage`, `classicEmbed`, `TEMPLATE`, `SCAD_ADDON`, `SRC_DIR`, `EMBED`, `renderPart`, `scadLiteral`, `FONT_DIR`, `toBinaryStl`, `isAsciiStl`, `triangleCount`, `writeOpenscadEdition`.
+- `3d-mockup-viewer`: `buildMockup`, `renderPage`, `classicEmbed`, `TEMPLATE`, `SCAD_ADDON`, `SRC_DIR`, `EMBED`, `renderPart`, `scadLiteral`, `FONT_DIR`, `toBinaryStl`, `isAsciiStl`, `triangleCount`, `writeOpenscadEdition`, `encodeShare`, `decodeShare`, `checkShare`, `shareLink`, `gatherShare`, and the share-link constants (`SHARE_VERSION`, `SHARE_NOTE_LENGTH`, `SHARE_MAX_LENGTH`, `SHARE_MAX_FILES`, `SHARE_MAX_BYTES`, `DEFAULT_SHARE_BASE`).
 - `3d-mockup-viewer/embed`: `embedViewer`, `defineMockupEmbed`, `PROTOCOL`, `PROTOCOL_VERSION`. Importing it in a browser also registers `<mockup-embed>`.
 
 ## 9. Embedding API
@@ -419,10 +421,11 @@ One link that holds the manifest and the OpenSCAD sources, for sending a design 
 
 - **Where it works:** self-hosted OpenSCAD-edition pages only, meaning GitHub Pages and other projects' copies. It is not offered inside Claude artifacts or when the viewer is embedded. **Share link** is shown only on a top-level `http(s)` page (not inside a frame), which rules out both, since artifacts run in a frame.
 - **Why the fragment:** the data goes after `#` (`viewer.html#m=<payload>`), not in the query string. Browsers never send the fragment to the server, so it doesn't reach the host's logs either. This keeps to "no server-side communication" (section 2).
-- **Payload:** JSON `{ v: 1, viewer, manifest, sources: { path: text }, values? }`, encoded as UTF-8, compressed with raw deflate, then written as base64url.
+- **Payload:** JSON `{ v: 1, viewer, manifest, main, sources: { path: text }, values? }`, encoded as UTF-8, compressed with raw deflate, then written as base64url.
   - `v`: the payload format. Every later viewer keeps reading every earlier version (see version drift below).
   - `viewer`: the version of the viewer that made the link, used only in messages ("made with 0.3.0").
   - `manifest`: the current manifest (section 6.9), so Arrange and manifest-editor edits come with it.
+  - `main`: the main `.scad` file (a key of `sources`), so the recipient's panel shows the same values.
   - `sources`: the main `.scad` file plus every file it reaches through `include`, `use` and `import()`, keyed by the same paths URL mode uses (section 5.3). Text-format imports (SVG, DXF, OFF, ASCII STL and OBJ, DAT) go in as text and count toward the size. Binary imports (PNG, binary STL) can't go in. Share link names the file that blocks it and says the model can't be shared as a link.
   - `values`: only the OpenSCAD panel fields that differ from their defaults (section 7.2), so the recipient sees the same variant.
 - **Compression:** fflate's `deflateSync`/`inflateSync` in the viewer (already loaded on every page, 3.5); Node's `zlib.deflateRawSync`/`inflateRawSync` in the CLI. Raw deflate is a standard format, so either side reads the other's links; the bytes needn't match. Tests check both directions.
@@ -431,7 +434,7 @@ One link that holds the manifest and the OpenSCAD sources, for sending a design 
   - Above 64 KB, Share link refuses and points to `mockup build`. Chrome itself accepts about 2 MB.
 - **What can't go in:** STL, 3MF and GLB parts, because a mesh is about 50 bytes per triangle, far too big for a link. A mockup whose parts aren't all OpenSCAD-rendered can't be shared this way; the button says why and points to `mockup build` (a single HTML file) instead.
 - **Making a link (viewer):** a **Share link** button in the OpenSCAD edition, next to Copy manifest (in Arrange and in the manifest editor's footer). It is enabled when every part comes from `scad` and all sources are loaded. The link points to the page's own address (origin and path), so another project's copy makes links to itself. The button copies the link inside the click handler (rule 2). If the clipboard is blocked, it shows the link in a text box, the same way Copy manifest does. It also shows the link's length and a one-line reminder that anyone with the link can read the full source.
-- **Making a link (CLI):** `mockup link <manifest> [--base <url>] [--root <dir>] [--lib <dir>]` prints the link. It gathers sources the way `mockup build --openscad` does, so the `enclosure-mockup` skill can print a share link next to the page it builds. `--base` defaults to the GitHub Pages empty OpenSCAD viewer (`https://sirmeili.github.io/3d-mockup-viewer/openscad/viewer.html`). This is a new, additive command (rule in 8.3).
+- **Making a link (CLI):** built: `mockup link` (section 8.3) and `lib/share.js` (3.1). The `enclosure-mockup` skill can print a share link next to the page it builds.
 - **Opening a link:** any OpenSCAD-edition page that finds `#m=` at start decodes the payload and shows it instead of any baked model. It loads through `mockupScad.loadSources(sources, manifest)` as URL mode does, applies `values` and renders. The fragment stays in the address bar, so reloading works. Failures go to the warning line: corrupt data, a version newer than this viewer, a missing include, or a link opened in the standard edition ("open this link in the OpenSCAD viewer").
 - **Read-only when opened from a link:** for now a shared mockup can be looked at but not changed.
   - Load files, drag-and-drop, Arrange, Edit manifest and Share link are hidden.
