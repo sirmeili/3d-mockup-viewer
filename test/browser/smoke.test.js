@@ -10,6 +10,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { decodeShare, encodeShare, gatherShare, shareLink } from '../../lib/share.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DIST = path.join(ROOT, 'dist');
@@ -469,6 +470,137 @@ test('manifest editor: sections fit a phone (dark)', async () => {
       assert.ok(over <= 1, `${id} section scrolls sideways by ${over}px`);
       await page.screenshot({ path: path.join(SHOTS, `editor-${id}-phone-dark.png`) });
     }
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+// ---------- share links (#m=): the manifest and .scad sources in the URL fragment, opened read-only ----------
+async function newPage(vp, scheme, extra = {}) {
+  const ctx = await browser.newContext(Object.assign({ viewport: { width: vp.width, height: vp.height }, colorScheme: scheme }, extra));
+  await routeCdn(ctx);
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  return { ctx, page, errors };
+}
+const nineParts = (page, timeout = 60000) => page.waitForFunction(() => document.querySelectorAll('.pname, .pname-in').length >= 9 && document.getElementById('loading').hidden, null, { timeout });
+// a shared mockup: rendered from the link's sources, with nothing to edit
+async function checkShared(page, errors, dims, shot) {
+  await nineParts(page, 180000);
+  assert.equal(await page.textContent('#title'), 'ESP32 Sensor Box');
+  assert.equal(await page.textContent('#dims'), dims);
+  assert.equal(await page.textContent('#status'), '', 'no warnings');
+  assert.ok(await canvasColours(page) > 40, 'model drawn');
+  const ro = await page.evaluate(() => ({
+    shown: ['openBox', 'arrBox', 'edBox', 'scadRender', 'scadReset', 'scadShare'].filter((id) => !document.getElementById(id).hidden),
+    locked: Array.from(document.querySelectorAll('#scadParams input, #scadParams select')).every((i) => i.disabled),
+    meta: document.getElementById('scadMeta').textContent, foot: document.getElementById('foot').textContent
+  }));
+  assert.deepEqual(ro.shown, [], 'editing controls hidden');
+  assert.ok(ro.locked, 'OpenSCAD fields locked');
+  assert.match(ro.meta, /view only/);
+  assert.match(ro.foot, /Opened from a share link: view only/);
+  await page.click('#m-exploded');
+  await page.waitForTimeout(900);
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  assert.ok(over <= 1, `page scrolls sideways by ${over}px`);
+  await page.screenshot({ path: path.join(SHOTS, shot), fullPage: true });
+  assert.deepEqual(errors, [], 'no page or console errors');
+}
+
+test('share link: made in the viewer, carries changed values, opens read-only (desktop, light)', async () => {
+  const { ctx, page, errors } = await newPage(VIEWPORTS[0], 'light', { permissions: ['clipboard-read', 'clipboard-write'] });
+  try {
+    await page.goto(BASE + 'openscad/index.html');
+    await nineParts(page);
+    assert.ok(await page.isVisible('#scadShare'), 'Share link shown on a top-level page');
+    await page.fill('#sp-W', '90');
+    await page.click('#scadShare');
+    assert.match(await page.textContent('#scadShareNote'), /^Link copied \(\d+\.\d KB\)\. Anyone with the link can see the model and read its full OpenSCAD source\.$/);
+    await page.screenshot({ path: path.join(SHOTS, 'share-button-desktop-light.png') });
+    const link = await page.evaluate(() => navigator.clipboard.readText());
+    assert.ok(link.startsWith(BASE + 'openscad/index.html#m='), link.slice(0, 80));
+    // the Node decoder reads the viewer's links
+    const p = decodeShare(link.split('#m=')[1]);
+    assert.deepEqual([p.main, Object.keys(p.sources), p.values, p.manifest.parts.length], ['sensor_box.scad', ['sensor_box.scad'], { W: 90 }, 9]);
+    assert.deepEqual(errors, [], 'no page or console errors');
+    const opened = await newPage(VIEWPORTS[0], 'light');
+    try {
+      await opened.page.goto(link);
+      await checkShared(opened.page, opened.errors, '90 × 50 × 22 mm', 'share-opened-desktop-light.png');
+      assert.equal(await opened.page.inputValue('#sp-W'), '90', 'the changed value comes with the link');
+    } finally { await opened.ctx.close(); }
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('share link: made by mockup link, opens read-only (phone, dark)', async () => {
+  const { payload } = gatherShare({ manifest: path.join(ROOT, 'examples/sensor-box/manifest.json'), viewer: 'test' });
+  const { ctx, page, errors } = await newPage(VIEWPORTS[1], 'dark');
+  try {
+    await page.goto(shareLink(BASE + 'openscad/viewer.html', payload));
+    await checkShared(page, errors, '70 × 50 × 22 mm', 'share-opened-phone-dark.png');
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('share link: damaged, newer and wrong-edition links explain themselves', async () => {
+  const { ctx, page, errors } = await newPage(VIEWPORTS[1], 'light');
+  const good = { v: 1, manifest: { parts: [] }, main: 'a.scad', sources: { 'a.scad': 'cube(1);' } };
+  const cases = [
+    ['openscad/viewer.html#m=AAAA', /damaged or cut short/],
+    ['openscad/viewer.html#m=' + encodeShare({ ...good, v: 9, viewer: '9.0.0' }), /made with a newer viewer \(9\.0\.0\)/],
+    ['viewer.html#m=' + encodeShare(good), /Open it in the OpenSCAD edition/]
+  ];
+  try {
+    for (const [url, re] of cases) {
+      await page.goto('about:blank');
+      await page.goto(BASE + url);
+      await page.waitForFunction((src) => new RegExp(src).test(document.getElementById('loading').textContent), re.source, { timeout: 20000 });
+      assert.ok(await page.isVisible('#loading'), url);
+      assert.ok(await page.isHidden('#openBox'), 'no Load files on a share link');
+    }
+    await page.screenshot({ path: path.join(SHOTS, 'share-bad-link-phone-light.png') });
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('share link: hidden inside a frame; explains mesh parts; falls back when the clipboard is blocked', async () => {
+  const { ctx, page, errors } = await newPage(VIEWPORTS[0], 'light');
+  try {
+    // framed (as in Claude artifacts and embeds): no Share link
+    await page.goto(BASE + 'index.html');
+    await page.evaluate((src) => { const f = document.createElement('iframe'); f.src = src; f.style.width = '1000px'; f.style.height = '800px'; document.body.appendChild(f); }, BASE + 'openscad/index.html');
+    const frame = await (await page.waitForSelector('iframe')).contentFrame();
+    await frame.waitForFunction(() => document.querySelectorAll('.pname').length >= 9 && document.getElementById('loading').hidden, null, { timeout: 60000 });
+    assert.ok(await frame.isHidden('#scadShare'), 'no Share link in a frame');
+
+    // the clipboard is blocked: the link is shown, selected, to copy by hand
+    await page.addInitScript(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('blocked')); });
+    await page.goto(BASE + 'openscad/index.html');
+    await nineParts(page);
+    await page.click('#scadShare');
+    assert.match(await page.textContent('#scadShareNote'), /^Copy is blocked here\. Select the link below/);
+    assert.ok(await page.isVisible('#scadShareText'));
+    assert.match(await page.inputValue('#scadShareText'), /openscad\/index\.html#m=/);
+
+    // a part from a mesh file can't go in a link
+    await page.goto(BASE + 'openscad/viewer.html');
+    await page.evaluate(async () => {
+      const buf = await (await fetch('../examples/sensor-box/base.stl')).arrayBuffer();
+      const dt = new DataTransfer(); dt.items.add(new File([buf], 'base.stl'));
+      const input = document.getElementById('fileInput'); input.files = dt.files; input.dispatchEvent(new Event('change'));
+    });
+    await page.waitForFunction(() => document.querySelectorAll('.pname').length >= 1 && document.getElementById('loading').hidden);
+    const msg = await page.evaluate(() => { try { window.mockupViewer.shareLink(); return 'no error'; } catch (e) { return e.message; } });
+    assert.match(msg, /only carry OpenSCAD parts; Base is a mesh file/);
     assert.deepEqual(errors, [], 'no page or console errors');
   } finally {
     await ctx.close();

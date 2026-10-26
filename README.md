@@ -7,6 +7,7 @@ Interactive mockups for 3D-printed enclosures. Load STL, 3MF, GLB or OpenSCAD pa
 - **Arrange**: set groups, explode offsets, materials and names visually, then copy the manifest
 - **Manifest editor**: edit everything in the manifest in one dialog (page text, parts, groups, views, finishes, spec sheet, raw JSON), with a live preview, drag-and-drop reordering, a change list and undo
 - **OpenSCAD edition**: renders `.scad` files in the browser and turns top-level values into editable fields
+- **Share links**: one link holds an OpenSCAD mockup's manifest and sources, and opens read-only in the recipient's browser. Nothing is uploaded; the model travels in the link
 - **Inline embeds**: `<mockup-embed>` puts a small display-only model view in any page; many can share a page
 - **Embedding API**: another app can put the viewer in an iframe, load models into it and get edited manifests back
 
@@ -43,6 +44,7 @@ npx mockup serve mockup                              # http://localhost:8080/vie
 - `mockup/index.html` is a self-contained page with every part baked in. Commit it, attach it, or publish it as an artifact.
 - `mockup/viewer.html?manifest=manifest.json` loads the manifest and part files live. Use it when the project already serves files, such as a project tracker.
 - To show a mockup inside another page, like an image: `<script src=".../embed.js"></script>` and `<mockup-embed src="mockup/manifest.json"></mockup-embed>`. To drive the viewer from another app (load models, switch views, save Arrange edits), use the embedding API. Both are in [docs/embedding.md](docs/embedding.md).
+- To send an OpenSCAD mockup to someone: `npx mockup link mockup/manifest.json` prints a link to the GitHub Pages viewer with the manifest and `.scad` sources packed into it (after `#`, so it never reaches a server). It opens read-only. On a self-hosted OpenSCAD viewer, the **Share link** button does the same from the page. Only OpenSCAD parts and text files fit; anyone with the link can read the source.
 - `--openscad` on `init`, `build` or `viewer` uses the OpenSCAD edition, so values can be edited and re-rendered in the page. Live loading renders any part whose STL is missing, straight from the `.scad` file. Serve from the project root (`npx mockup serve .`, then open `/mockup/viewer.html?manifest=manifest.json`) so the page can reach the `.scad` file.
 
 To upgrade: change the tag in `package.json`, reinstall, then run `npx mockup viewer mockup` to refresh the copied viewer.
@@ -56,6 +58,7 @@ mockup build <manifest.json> -o <out.html> [--drop-in] [--openscad] [--stl-dir d
                                            [--engine wasm|native] [--lib dir] [--title text] [--embed-origin origin]
 mockup init [dir] [--scad file.scad] [--openscad] [--embed-origin origin]
 mockup viewer <dir> [--openscad] [--embed-origin origin]
+mockup link <manifest.json> [--base url] [--lib dir]
 mockup render <file.scad> -o <out.stl> [-D name=value ...]
 mockup serve [dir] [--port 8080]
 ```

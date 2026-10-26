@@ -15,7 +15,7 @@ Interactive 3D mockups for 3D-printed enclosures. One viewer page (three.js), an
 - `src/embed.js`: host-side helper for the embedding API (`embedViewer`) and the `<mockup-embed>` element, exported as `3d-mockup-viewer/embed`. The build copies it to `dist/embed.mjs` and converts it to a classic script, `dist/embed.js` (`classicEmbed` in `lib/build.js`), so keep to top-level `export const|function|class` and `import.meta.url`. The protocol lives in the "embedding API" section of `viewer.html`; keep both and `docs/embedding.md` in step, and bump the protocol version for breaking changes.
 - `src/scad-worker.js`: module worker that imports `./openscad.js`. A fresh OpenSCAD instance per job (the WASM build only allows one `callMain` per instance). Renders with `--backend=manifold`, retries once with the classic engine.
 - `src/landing.html`: GitHub Pages index.
-- `lib/`: Node library (`build.js` page building, `scad.js` rendering via `openscad-wasm-prebuilt`, `edition.js` OpenSCAD runtime files, `stl.js`).
+- `lib/`: Node library (`build.js` page building, `scad.js` rendering via `openscad-wasm-prebuilt`, `edition.js` OpenSCAD runtime files, `stl.js`, `share.js` share links). The viewer keeps its own copy of the share-link encoder and decoder ("share links" in `viewer.html`); keep the two in step.
 - `cli/mockup.js`: the `mockup` command.
 - `scripts/build-dist.js`: builds `dist/` (not committed).
 - `examples/sensor-box/`: sample model, used by the demos and tests.
