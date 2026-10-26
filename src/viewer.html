@@ -2366,6 +2366,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     if (names.some((n) => typeof p.sources[n] !== 'string')) throw bad('The link is damaged: a source file is not text.');
     if (typeof p.main !== 'string' || p.sources[p.main] === undefined) throw bad('The link is damaged: its main OpenSCAD file is missing.');
     if (p.values !== undefined && !isObj(p.values)) throw bad('The link is damaged: its values are not valid.');
+    if (p.hidden !== undefined && !(Array.isArray(p.hidden) && p.hidden.every((h) => typeof h === 'string'))) throw bad('The link is damaged: its hidden parts are not valid.');
     return p;
   }
   async function loadShared(str) {
@@ -2375,6 +2376,11 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     try { p = decodeShare(str); } catch (e) { fatal(e.message); return; }
     $('foot').textContent += ' Opened from a share link: view only' + (p.viewer ? ', made with viewer ' + p.viewer : '') + '.';
     await window.mockupScad.loadSources(p.sources, p.manifest, { main: p.main, values: p.values || {}, readOnly: true });
+    // parts the sender had switched off start off here too (the Parts checkboxes still work)
+    if (p.hidden && p.hidden.length) {
+      state.parts.forEach((part) => { if (p.hidden.includes(part.id)) part.visible = false; });
+      renderParts(); applyPose();
+    }
   }
   // pasting another share link into the address bar only changes the fragment; start over with it
   window.addEventListener('hashchange', () => {
@@ -2466,6 +2472,8 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const d = window.mockupScad.shareData(mf);
     const payload = { v: SHARE_VERSION, viewer: (document.querySelector('meta[name="mockup-viewer-version"]') || {}).content || null, manifest: mf, main: d.main, sources: d.sources };
     if (Object.keys(d.values).length) payload.values = d.values;
+    const hidden = state.parts.filter((p) => !p.visible).map((p) => p.id);
+    if (hidden.length) payload.hidden = hidden;
     const link = location.origin + location.pathname + '#m=' + encodeShare(payload);
     const kb = (link.length / 1024).toFixed(1);
     if (link.length > SHARE_MAX_LENGTH) throw new Error('The link would be ' + kb + ' KB; share links stop at ' + SHARE_MAX_LENGTH / 1024 + ' KB. Use mockup build to make a single HTML file instead.');

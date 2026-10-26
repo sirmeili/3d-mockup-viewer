@@ -511,30 +511,38 @@ async function checkShared(page, errors, dims, shot) {
   assert.deepEqual(errors, [], 'no page or console errors');
 }
 
-test('share link: made in the viewer, carries changed values, opens read-only (desktop, light)', async () => {
+test('share link: made in the viewer, carries changed values and hidden parts, opens read-only (desktop, light)', async () => {
   const { ctx, page, errors } = await newPage(VIEWPORTS[0], 'light', { permissions: ['clipboard-read', 'clipboard-write'] });
+  let link;
   try {
     await page.goto(BASE + 'openscad/index.html');
     await nineParts(page);
     assert.ok(await page.isVisible('#scadShare'), 'Share link shown on a top-level page');
     await page.fill('#sp-W', '90');
+    await page.uncheck('#part-pipes');
     await page.click('#scadShare');
     assert.match(await page.textContent('#scadShareNote'), /^Link copied \(\d+\.\d KB\)\. Anyone with the link can see the model and read its full OpenSCAD source\.$/);
     await page.screenshot({ path: path.join(SHOTS, 'share-button-desktop-light.png') });
-    const link = await page.evaluate(() => navigator.clipboard.readText());
-    assert.ok(link.startsWith(BASE + 'openscad/index.html#m='), link.slice(0, 80));
-    // the Node decoder reads the viewer's links
-    const p = decodeShare(link.split('#m=')[1]);
-    assert.deepEqual([p.main, Object.keys(p.sources), p.values, p.manifest.parts.length], ['sensor_box.scad', ['sensor_box.scad'], { W: 90 }, 9]);
+    link = await page.evaluate(() => navigator.clipboard.readText());
     assert.deepEqual(errors, [], 'no page or console errors');
-    const opened = await newPage(VIEWPORTS[0], 'light');
-    try {
-      await opened.page.goto(link);
-      await checkShared(opened.page, opened.errors, '90 × 50 × 22 mm', 'share-opened-desktop-light.png');
-      assert.equal(await opened.page.inputValue('#sp-W'), '90', 'the changed value comes with the link');
-    } finally { await opened.ctx.close(); }
   } finally {
+    // closed before the link opens: two SwiftShader WebGL pages at once make screenshots slow and flaky
     await ctx.close();
+  }
+  assert.ok(link.startsWith(BASE + 'openscad/index.html#m='), link.slice(0, 80));
+  // the Node decoder reads the viewer's links
+  const p = decodeShare(link.split('#m=')[1]);
+  assert.deepEqual([p.main, Object.keys(p.sources), p.values, p.manifest.parts.length], ['sensor_box.scad', ['sensor_box.scad'], { W: 90 }, 9]);
+  assert.deepEqual(p.hidden, ['pipes'], 'switched-off parts go in the link');
+  const opened = await newPage(VIEWPORTS[0], 'light');
+  try {
+    await opened.page.goto(link);
+    await checkShared(opened.page, opened.errors, '90 × 50 × 22 mm', 'share-opened-desktop-light.png');
+    assert.equal(await opened.page.inputValue('#sp-W'), '90', 'the changed value comes with the link');
+    assert.equal(await opened.page.isChecked('#part-pipes'), false, 'a switched-off part starts off');
+    assert.equal(await opened.page.isChecked('#part-lid'), true);
+  } finally {
+    await opened.ctx.close();
   }
 });
 

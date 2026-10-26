@@ -63,6 +63,8 @@ test('decoding rejects damaged, newer and oversized links', () => {
   assert.throws(() => decodeShare(pack({ ...good, v: 2, viewer: '3.0.0' })), /newer viewer \(3\.0\.0\)/);
   assert.throws(() => decodeShare(pack({ ...good, main: 'b.scad' })), /main OpenSCAD file/);
   assert.throws(() => decodeShare(pack({ ...good, sources: { 'a.scad': 1 } })), /not text/);
+  assert.throws(() => decodeShare(pack({ ...good, hidden: 'lid' })), /hidden parts/);
+  assert.deepEqual(decodeShare(pack({ ...good, hidden: ['lid'] })).hidden, ['lid']);
   assert.throws(() => decodeShare('A'.repeat(SHARE_MAX_LENGTH + 1)), /longer than/);
   const bomb = zlib.deflateRawSync(Buffer.alloc(6 * 1024 * 1024, 32)).toString('base64url');
   assert.throws(() => decodeShare(bomb), /could not be unpacked/);
