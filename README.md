@@ -30,7 +30,7 @@ Everything runs in the browser. A finished mockup is a single HTML file you can 
 Install straight from GitHub at a tagged version (no npm registry needed):
 
 ```sh
-npm install --save-dev github:sirmeili/3d-mockup-viewer#v0.1.0
+npm install --save-dev github:sirmeili/3d-mockup-viewer#v0.2.0
 ```
 
 Then, in that project:

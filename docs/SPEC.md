@@ -6,7 +6,7 @@ Detailed references that this document relies on and doesn't repeat in full:
 - [docs/manifest.md](manifest.md): every manifest field.
 - [docs/embedding.md](embedding.md): the embedding API, helper and protocol.
 
-Status: describes `main` as of 2026-10-24 (package version 0.1.0, tag `v0.1.0`, plus the embedding API merged after that tag).
+Status: describes `main` as of 2026-10-26 (package version 0.2.0, tag `v0.2.0`).
 
 ---
 
@@ -458,7 +458,7 @@ Have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to 
 Found while writing this document. Each needs a decision; none has been changed.
 
 1. **`mockup serve` can serve files outside its folder.** The containment check is a string prefix test, and the path is URL-decoded after normalisation. Verified: serving `site/`, the request `GET /..%2Fsite-private/b.txt` returned a file from the sibling folder `site-private/`. The server also listens on every network interface, so this is reachable from the local network. Low impact (a read-only dev server, and only sibling folders whose names start with the served folder's name). Proposed fix: compare with `path.relative`, reject `..`, and listen on `localhost` by default with a flag for the network.
-2. **Copied viewers report the wrong version.** `mockup viewer` and `mockup init` write the template's placeholder `<meta name="mockup-viewer-version" content="1.0">`; only `dist/` pages are stamped with the package version (0.1.0). The embedding API's `ready.viewerVersion` passes this value on. Should `renderPage` stamp the version?
+2. **Copied viewers report the wrong version.** `mockup viewer` and `mockup init` write the template's placeholder `<meta name="mockup-viewer-version" content="1.0">`; only `dist/` pages are stamped with the package version (0.2.0). The embedding API's `ready.viewerVersion` passes this value on. Should `renderPage` stamp the version?
 3. **Material guessing differs between the CLI and the viewer.** For a part name with no match, `mockup init` writes `plastic-white`, while the viewer gives an unmatched part a colour from a rotating palette. The keyword lists also differ slightly (the viewer also matches `esp`, `uext`, `shield`, `can`, `enclosure`). Should they share one rule?
 4. **No time limit on in-browser OpenSCAD renders.** A model that never finishes keeps a worker busy, and the Render button stays disabled. Add a per-job timeout (terminate and replace the worker)?
 5. **URL mode's source warnings.** When the OpenSCAD edition fetches sources in URL mode, a failed fetch is reported only for the first N files in the queue, where N is the number of parts. The comparison looks unintended; a missing include further down is silent until the render fails.

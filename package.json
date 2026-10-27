@@ -1,6 +1,6 @@
 {
   "name": "3d-mockup-viewer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Interactive 3D mockups for printable enclosures: assembled, exploded, see-inside and section views from STL, 3MF, GLB or OpenSCAD.",
   "type": "module",
   "bin": {
