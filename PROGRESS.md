@@ -11,7 +11,7 @@
   - Browser tests: test host on a second local server; URL load, bytes load, controls, Arrange edit → `change`, origin rejection, OpenSCAD values + render.
 
 ## In progress
-- Nothing.
+- Release v0.2.0 (branch `chore/release-0.2.0`): version bumped in package.json, package-lock.json, README install line and the spec status. After merge: tag `v0.2.0` on main, push tags, republish the two Claude artifacts.
 
 ## Next
 - Tracker side (in `ai-project-tracker`, its own backlog): where mockups live and how an item shows one. It has no mockup or file storage yet.
@@ -19,6 +19,7 @@
 - Planned work in docs/SPEC.md section 12, in order (items 1, 3 and 6 remain; numbers are kept stable).
 
 ## Decisions
+- 2026-10-26: Release as v0.2.0, not v1.0. The interfaces are not settled yet: this release changes `dist/embed.js` to a classic script, open questions 1 (serve containment) and 2 (copied viewer version) are undecided, and planned items 1 and 3 may change the URL parameters and the editor.
 | Date | Decision | Why |
 | --- | --- | --- |
 | 2026-10-24 | Embedding API built host-agnostic now; tracker integration later as its own item. | The tracker has no mockup/file storage or embedding in its spec yet. Owner's choice. |
