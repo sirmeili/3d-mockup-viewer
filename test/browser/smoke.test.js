@@ -525,7 +525,10 @@ for (const [vp, scheme] of [[VIEWPORTS[0], 'light'], [VIEWPORTS[1], 'dark']]) {
       await page.goto(HOST + 'many');
       await page.waitForFunction(() => document.getElementById('e0').dataset.state === 'live', null, { timeout: 60000 });
       const frame = await (await page.locator('#e0 iframe').elementHandle()).contentFrame();
-      assert.ok(await canvasColours(frame) > 40, 'the first embed draws its model');
+      // "live" comes with the viewer's ready message; give its first frames time to draw (slow on CI)
+      let drawn = 0;
+      for (const until = Date.now() + 10000; drawn <= 40 && Date.now() < until; await page.waitForTimeout(250)) drawn = await canvasColours(frame);
+      assert.ok(drawn > 40, `the first embed draws its model (${drawn} colours on the canvas)`);
       assert.ok(await frame.locator('#m-exploded').isVisible(), 'chosen controls show');
       assert.equal(await frame.locator('header').isVisible(), false, 'compact: no header');
       assert.match(await page.getAttribute('#e0 .open', 'href'), /viewer\.html\?manifest=.*manifest\.json$/, 'link opens the full viewer');
