@@ -70,12 +70,13 @@ test.after(async () => {
 });
 
 // Count distinct colours on the WebGL canvas. A blank canvas has one; a rendered model has hundreds.
-async function canvasColours(page) {
-  return page.evaluate(() => new Promise((resolve) => {
+// fullSize counts at the canvas's own size: a wide, short one (an embed) squashed to 160×100 leaves the model a few pixels.
+async function canvasColours(page, fullSize = false) {
+  return page.evaluate((full) => new Promise((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const src = document.getElementById('view');
       const c = document.createElement('canvas');
-      c.width = 160; c.height = 100;
+      c.width = full ? src.width : 160; c.height = full ? src.height : 100;
       const ctx = c.getContext('2d');
       ctx.drawImage(src, 0, 0, c.width, c.height);
       const d = ctx.getImageData(0, 0, c.width, c.height).data;
@@ -83,7 +84,7 @@ async function canvasColours(page) {
       for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 0) seen.add((d[i] >> 3) << 10 | (d[i + 1] >> 3) << 5 | (d[i + 2] >> 3));
       resolve(seen.size);
     }));
-  }));
+  }), fullSize);
 }
 
 for (const pg of PAGES) {
@@ -525,9 +526,7 @@ for (const [vp, scheme] of [[VIEWPORTS[0], 'light'], [VIEWPORTS[1], 'dark']]) {
       await page.goto(HOST + 'many');
       await page.waitForFunction(() => document.getElementById('e0').dataset.state === 'live', null, { timeout: 60000 });
       const frame = await (await page.locator('#e0 iframe').elementHandle()).contentFrame();
-      // "live" comes with the viewer's ready message; give its first frames time to draw (slow on CI)
-      let drawn = 0;
-      for (const until = Date.now() + 10000; drawn <= 40 && Date.now() < until; await page.waitForTimeout(250)) drawn = await canvasColours(frame);
+      const drawn = await canvasColours(frame, true);
       assert.ok(drawn > 40, `the first embed draws its model (${drawn} colours on the canvas)`);
       assert.ok(await frame.locator('#m-exploded').isVisible(), 'chosen controls show');
       assert.equal(await frame.locator('header').isVisible(), false, 'compact: no header');
