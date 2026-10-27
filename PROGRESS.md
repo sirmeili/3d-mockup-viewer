@@ -1,6 +1,7 @@
 # Progress
 
 ## Done
+- 2026-10-26: Fixed the CI failure in the `<mockup-embed>` browser test (branch `fix/embed-test-race`, PR #7): `canvasColours` squashed the wide, short embed canvas to 160×100, leaving the model a few pixels and the count at the threshold (40 on CI, 41 locally). The embed check now counts at the canvas's own size (about 70). A first attempt that polled for 10 s did not help: the model was drawn, the measurement was the problem.
 - 2026-10-24: Planned item 5, simple inline embed (branch `feat/inline-embed`, awaiting review/merge): compact mode (`?embed` with `controls`, `mode`, `view`, `finish`, `theme`), the `snapshot` command, `<mockup-embed>` (lazy start near the viewport, stills, at most 8 live, `load="click"`, `link`, errors in the frame), classic `dist/embed.js` plus `dist/embed.mjs`.
 - 2026-10-24: Manifest editor, planned items 4 and 2 (PR #3, merged). Phase 1: shared edits, undo history, dialog with live preview and change list. Phase 2: Page (with up axis), Parts, Groups, Views, Finishes, Spec sheet. Phase 3: reordering by drag (mouse, touch, pen), arrow keys and buttons. Phase 4: Raw JSON with checks and Apply; Edit manifest moved to the header beside Load files.
 - 2026-10-24: Embedding API, TODO item 1. Merged into main (PR #1).
