@@ -489,6 +489,12 @@ async function newPage(vp, scheme, extra = {}) {
 }
 const partsShown = (page, n, timeout = 60000) => page.waitForFunction((k) => document.querySelectorAll('.pname, .pname-in').length === k && document.getElementById('loading').hidden, n, { timeout });
 const nineParts = (page, timeout) => partsShown(page, 9, timeout);
+// click Share link and wait for its note: it is written after the (async) clipboard copy
+async function shareNote(page) {
+  await page.click('#scadShare');
+  await page.waitForFunction(() => document.getElementById('scadShareNote').textContent !== '', null, { timeout: 10000 });
+  return page.textContent('#scadShareNote');
+}
 // a shared mockup: rendered from the link's sources, with nothing to edit
 async function checkShared(page, errors, dims, shot, parts = 9) {
   await partsShown(page, parts, 180000);
@@ -529,8 +535,7 @@ test('share link: made in the viewer, carries changed values and hidden parts, o
     await page.click('#ed-part-omit-rj45'); // click, not check: the card is redrawn as the part leaves
     await page.click('#edDone');
     await partsShown(page, 8);
-    await page.click('#scadShare');
-    assert.match(await page.textContent('#scadShareNote'), /^Link copied \(\d+\.\d KB\)\. Anyone with the link can see the model and read its full OpenSCAD source\.$/);
+    assert.match(await shareNote(page), /^Link copied \(\d+\.\d KB\)\. Anyone with the link can see the model and read its full OpenSCAD source\.$/);
     await page.screenshot({ path: path.join(SHOTS, 'share-button-desktop-light.png') });
     link = await page.evaluate(() => navigator.clipboard.readText());
     assert.deepEqual(errors, [], 'no page or console errors');
@@ -607,8 +612,7 @@ test('share link: hidden inside a frame; explains mesh parts; falls back when th
     await page.addInitScript(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('blocked')); });
     await page.goto(BASE + 'openscad/index.html');
     await nineParts(page);
-    await page.click('#scadShare');
-    assert.match(await page.textContent('#scadShareNote'), /^Copy is blocked here\. Select the link below/);
+    assert.match(await shareNote(page), /^Copy is blocked here\. Select the link below/);
     assert.ok(await page.isVisible('#scadShareText'));
     assert.match(await page.inputValue('#scadShareText'), /openscad\/index\.html#m=/);
 
