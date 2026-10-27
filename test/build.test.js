@@ -36,6 +36,24 @@ test('OpenSCAD edition embeds sources and the add-on', async () => {
   assert.deepEqual(data.manifest.parts[0].scad, { file: 'sensor_box.scad', defines: { part: 'base' } });
 });
 
+test('omitted parts are not rendered or embedded, but stay in the manifest', async () => {
+  const dir = tmp();
+  const mf = JSON.parse(fs.readFileSync(path.join(ROOT, 'examples/sensor-box/manifest.json'), 'utf8'));
+  mf.parts.forEach((p) => { p.scad.file = path.relative(dir, path.join(ROOT, 'examples/sensor-box', p.scad.file)).split(path.sep).join('/'); });
+  mf.parts.find((p) => p.id === 'pipes').omit = true;
+  mf.parts.find((p) => p.id === 'lid').hidden = true;
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(mf));
+  const out = path.join(dir, 'page.html');
+  const res = await buildMockup({ manifest: path.join(dir, 'manifest.json'), out, stlDir: dir });
+  assert.equal(res.parts, 8);
+  assert.ok(!fs.existsSync(path.join(dir, 'pipes.stl')), 'the omitted part is not rendered');
+  const data = dataOf(fs.readFileSync(out, 'utf8'));
+  assert.equal(Object.keys(data.files).length, 8);
+  const pipes = data.manifest.parts.find((p) => p.id === 'pipes');
+  assert.equal(pipes.omit, true);
+  assert.equal(data.manifest.parts.find((p) => p.id === 'lid').hidden, true);
+});
+
 test('text() renders with the bundled fonts', async () => {
   const dir = tmp();
   const f = path.join(dir, 't.scad');

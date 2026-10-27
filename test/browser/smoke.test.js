@@ -10,6 +10,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { decodeShare, encodeShare, gatherShare, shareLink } from '../../lib/share.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DIST = path.join(ROOT, 'dist');
@@ -470,6 +471,225 @@ test('manifest editor: sections fit a phone (dark)', async () => {
       assert.ok(over <= 1, `${id} section scrolls sideways by ${over}px`);
       await page.screenshot({ path: path.join(SHOTS, `editor-${id}-phone-dark.png`) });
     }
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+// ---------- share links (#m=): the manifest and .scad sources in the URL fragment, opened read-only ----------
+async function newPage(vp, scheme, extra = {}) {
+  const ctx = await browser.newContext(Object.assign({ viewport: { width: vp.width, height: vp.height }, colorScheme: scheme }, extra));
+  await routeCdn(ctx);
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  return { ctx, page, errors };
+}
+const partsShown = (page, n, timeout = 60000) => page.waitForFunction((k) => document.querySelectorAll('.pname, .pname-in').length === k && document.getElementById('loading').hidden, n, { timeout });
+const nineParts = (page, timeout) => partsShown(page, 9, timeout);
+// a shared mockup: rendered from the link's sources, with nothing to edit
+async function checkShared(page, errors, dims, shot, parts = 9) {
+  await partsShown(page, parts, 180000);
+  assert.equal(await page.textContent('#title'), 'ESP32 Sensor Box');
+  assert.equal(await page.textContent('#dims'), dims);
+  assert.equal(await page.textContent('#status'), '', 'no warnings');
+  assert.ok(await canvasColours(page) > 40, 'model drawn');
+  const ro = await page.evaluate(() => ({
+    shown: ['openBox', 'arrBox', 'edBox', 'scadRender', 'scadReset', 'scadShare'].filter((id) => !document.getElementById(id).hidden),
+    locked: Array.from(document.querySelectorAll('#scadParams input, #scadParams select')).every((i) => i.disabled),
+    meta: document.getElementById('scadMeta').textContent, foot: document.getElementById('foot').textContent
+  }));
+  assert.deepEqual(ro.shown, [], 'editing controls hidden');
+  assert.ok(ro.locked, 'OpenSCAD fields locked');
+  assert.match(ro.meta, /view only/);
+  assert.match(ro.foot, /Opened from a share link: view only/);
+  await page.click('#m-exploded');
+  await page.waitForTimeout(900);
+  const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  assert.ok(over <= 1, `page scrolls sideways by ${over}px`);
+  await page.screenshot({ path: path.join(SHOTS, shot), fullPage: true });
+  assert.deepEqual(errors, [], 'no page or console errors');
+}
+
+test('share link: made in the viewer, carries changed values and hidden parts, opens read-only (desktop, light)', async () => {
+  const { ctx, page, errors } = await newPage(VIEWPORTS[0], 'light', { permissions: ['clipboard-read', 'clipboard-write'] });
+  let link;
+  try {
+    await page.goto(BASE + 'openscad/index.html');
+    await nineParts(page);
+    assert.ok(await page.isVisible('#scadShare'), 'Share link shown on a top-level page');
+    await page.fill('#sp-W', '90');
+    await page.uncheck('#part-pipes');
+    // leave a part out in the manifest editor: it goes in the link's manifest and the recipient never sees it
+    await page.click('#edOpen');
+    await page.click('#ed-nav-parts');
+    await page.click('#ed-part-edit-rj45');
+    await page.click('#ed-part-omit-rj45'); // click, not check: the card is redrawn as the part leaves
+    await page.click('#edDone');
+    await partsShown(page, 8);
+    await page.click('#scadShare');
+    assert.match(await page.textContent('#scadShareNote'), /^Link copied \(\d+\.\d KB\)\. Anyone with the link can see the model and read its full OpenSCAD source\.$/);
+    await page.screenshot({ path: path.join(SHOTS, 'share-button-desktop-light.png') });
+    link = await page.evaluate(() => navigator.clipboard.readText());
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    // closed before the link opens: two SwiftShader WebGL pages at once make screenshots slow and flaky
+    await ctx.close();
+  }
+  assert.ok(link.startsWith(BASE + 'openscad/index.html#m='), link.slice(0, 80));
+  // the Node decoder reads the viewer's links
+  const p = decodeShare(link.split('#m=')[1]);
+  assert.deepEqual([p.main, Object.keys(p.sources), p.values, p.manifest.parts.length], ['sensor_box.scad', ['sensor_box.scad'], { W: 90 }, 9]);
+  assert.deepEqual(p.manifest.parts.filter((x) => x.hidden).map((x) => x.id), ['pipes'], 'switched-off parts are "hidden" in the link\'s manifest');
+  assert.deepEqual(p.manifest.parts.filter((x) => x.omit).map((x) => x.id), ['rj45'], 'left-out parts are "omit"');
+  const opened = await newPage(VIEWPORTS[0], 'light');
+  try {
+    await opened.page.goto(link);
+    await checkShared(opened.page, opened.errors, '90 × 50 × 22 mm', 'share-opened-desktop-light.png', 8);
+    assert.equal(await opened.page.inputValue('#sp-W'), '90', 'the changed value comes with the link');
+    assert.equal(await opened.page.isChecked('#part-pipes'), false, 'a switched-off part starts off');
+    assert.equal(await opened.page.locator('#part-rj45').count(), 0, 'a left-out part is nowhere');
+    // on a shared mockup the checkbox is only for viewing: nothing is remembered
+    await opened.page.uncheck('#part-lid');
+    assert.equal(await opened.page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('mockupEdits:')).length), 0);
+  } finally {
+    await opened.ctx.close();
+  }
+});
+
+test('share link: made by mockup link, opens read-only (phone, dark)', async () => {
+  const { payload } = gatherShare({ manifest: path.join(ROOT, 'examples/sensor-box/manifest.json'), viewer: 'test' });
+  const { ctx, page, errors } = await newPage(VIEWPORTS[1], 'dark');
+  try {
+    await page.goto(shareLink(BASE + 'openscad/viewer.html', payload));
+    await checkShared(page, errors, '70 × 50 × 22 mm', 'share-opened-phone-dark.png');
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('share link: damaged, newer and wrong-edition links explain themselves', async () => {
+  const { ctx, page, errors } = await newPage(VIEWPORTS[1], 'light');
+  const good = { v: 1, manifest: { parts: [] }, main: 'a.scad', sources: { 'a.scad': 'cube(1);' } };
+  const cases = [
+    ['openscad/viewer.html#m=AAAA', /damaged or cut short/],
+    ['openscad/viewer.html#m=' + encodeShare({ ...good, v: 9, viewer: '9.0.0' }), /made with a newer viewer \(9\.0\.0\)/],
+    ['viewer.html#m=' + encodeShare(good), /Open it in the OpenSCAD edition/]
+  ];
+  try {
+    for (const [url, re] of cases) {
+      await page.goto('about:blank');
+      await page.goto(BASE + url);
+      await page.waitForFunction((src) => new RegExp(src).test(document.getElementById('loading').textContent), re.source, { timeout: 20000 });
+      assert.ok(await page.isVisible('#loading'), url);
+      assert.ok(await page.isHidden('#openBox'), 'no Load files on a share link');
+    }
+    await page.screenshot({ path: path.join(SHOTS, 'share-bad-link-phone-light.png') });
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('share link: hidden inside a frame; explains mesh parts; falls back when the clipboard is blocked', async () => {
+  const { ctx, page, errors } = await newPage(VIEWPORTS[0], 'light');
+  try {
+    // framed (as in Claude artifacts and embeds): no Share link
+    await page.goto(BASE + 'index.html');
+    await page.evaluate((src) => { const f = document.createElement('iframe'); f.src = src; f.style.width = '1000px'; f.style.height = '800px'; document.body.appendChild(f); }, BASE + 'openscad/index.html');
+    const frame = await (await page.waitForSelector('iframe')).contentFrame();
+    await frame.waitForFunction(() => document.querySelectorAll('.pname').length >= 9 && document.getElementById('loading').hidden, null, { timeout: 60000 });
+    assert.ok(await frame.isHidden('#scadShare'), 'no Share link in a frame');
+
+    // the clipboard is blocked: the link is shown, selected, to copy by hand
+    await page.addInitScript(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('blocked')); });
+    await page.goto(BASE + 'openscad/index.html');
+    await nineParts(page);
+    await page.click('#scadShare');
+    assert.match(await page.textContent('#scadShareNote'), /^Copy is blocked here\. Select the link below/);
+    assert.ok(await page.isVisible('#scadShareText'));
+    assert.match(await page.inputValue('#scadShareText'), /openscad\/index\.html#m=/);
+
+    // a part from a mesh file can't go in a link
+    await page.goto(BASE + 'openscad/viewer.html');
+    await page.evaluate(async () => {
+      const buf = await (await fetch('../examples/sensor-box/base.stl')).arrayBuffer();
+      const dt = new DataTransfer(); dt.items.add(new File([buf], 'base.stl'));
+      const input = document.getElementById('fileInput'); input.files = dt.files; input.dispatchEvent(new Event('change'));
+    });
+    await page.waitForFunction(() => document.querySelectorAll('.pname').length >= 1 && document.getElementById('loading').hidden);
+    const msg = await page.evaluate(() => { try { window.mockupViewer.shareLink(); return 'no error'; } catch (e) { return e.message; } });
+    assert.match(msg, /only carry OpenSCAD parts; Base is a mesh file/);
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+// ---------- part visibility in the manifest: "hidden" (starts off) and "omit" (left out) ----------
+test('part visibility: hidden and omit from the manifest, the checkbox as an edit, Left out in the editor, Raw JSON', async () => {
+  const { ctx, page, errors } = await newPage(VIEWPORTS[0], 'light', { permissions: ['clipboard-read', 'clipboard-write'] });
+  const mf = JSON.parse(fs.readFileSync(path.join(DIST, 'examples/sensor-box/manifest.json'), 'utf8'));
+  mf.name = 'Visibility test';
+  mf.parts.find((p) => p.id === 'lid').hidden = true;
+  mf.parts.find((p) => p.id === 'pipes').omit = true;
+  await ctx.route(BASE + 'examples/sensor-box/visibility.json', (route) => route.fulfill({ body: JSON.stringify(mf), contentType: 'application/json' }));
+  const fetched = [];
+  page.on('request', (r) => fetched.push(r.url()));
+  try {
+    await page.goto(BASE + 'viewer.html?manifest=examples/sensor-box/visibility.json');
+    await partsShown(page, 8);
+    assert.ok(!fetched.some((u) => u.endsWith('/pipes.stl')), 'an omitted part is never fetched');
+    assert.equal(await page.locator('#part-pipes').count(), 0, 'an omitted part is not listed');
+    assert.equal(await page.isChecked('#part-lid'), false, 'a hidden part is listed, unticked');
+    assert.equal(await page.evaluate(() => { const dt = Array.from(document.querySelectorAll('#sheet dt')).find((d) => d.textContent === 'Parts'); return dt && dt.nextElementSibling.textContent; }), '8', 'Model data counts the parts in the mockup');
+    assert.ok(await canvasColours(page) > 40, 'model drawn');
+
+    // ticking a part on a page with Arrange is a manifest edit
+    await page.check('#part-lid');
+    await page.click('#edOpen');
+    assert.deepEqual(await changeList(page), ['Lid: starts shown']);
+    await page.click('#ed-nav-parts');
+    await page.click('#ed-part-edit-rj45');
+    assert.equal(await page.isChecked('#ed-part-hidden-rj45'), false);
+    await page.click('#ed-part-omit-rj45'); // click, not check: the card is redrawn as the part leaves
+    assert.match(await page.textContent('#ed-count-parts'), /^7 /, 'leaving a part out takes it out at once');
+    assert.deepEqual(await page.$$eval('#ed-left-out label', (l) => l.map((x) => x.textContent)), ['Leave out: RJ45 jack', 'Leave out: Light pipes']);
+    await page.click('#ed-omit-pipes');
+    assert.match(await page.textContent('#ed-left-out'), /shows once the files are loaded again/);
+    assert.deepEqual(await changeList(page), ['Lid: starts shown', 'RJ45 jack: left out', 'Light pipes: put back']);
+    await page.screenshot({ path: path.join(SHOTS, 'editor-left-out-desktop-light.png') });
+    let out = await copiedManifest(page);
+    const byId = (id) => out.parts.find((p) => p.id === id);
+    assert.equal(out.parts.length, 9, 'left-out parts stay in the manifest');
+    assert.equal(byId('rj45').omit, true);
+    assert.equal(byId('pipes').omit, undefined, 'put back');
+    assert.equal(byId('lid').hidden, undefined, 'ticked on, so no longer hidden');
+    await page.click('#edUndo');
+    await page.click('#edUndo');
+    assert.match(await page.textContent('#ed-count-parts'), /^8 /, 'undo puts the part back');
+    assert.deepEqual(await changeList(page), ['Lid: starts shown']);
+
+    // Raw JSON: an omitted part that was never loaded may be listed; "omit" and "hidden" must be true or false
+    await page.click('#ed-nav-json');
+    const json = JSON.parse(await page.inputValue('#ed-json'));
+    assert.equal(json.parts.find((p) => p.id === 'pipes').omit, true);
+    json.parts.find((p) => p.id === 'module').hidden = 'yes';
+    await page.fill('#ed-json', JSON.stringify(json, null, 2));
+    assert.ok((await page.$$eval('.ed-problem span', (l) => l.map((x) => x.textContent))).some((x) => /"hidden" must be true or false/.test(x)), 'a non-boolean hidden is explained');
+    json.parts.find((p) => p.id === 'module').hidden = true;
+    json.parts.find((p) => p.id === 'usbc').omit = true;
+    await page.fill('#ed-json', JSON.stringify(json, null, 2));
+    await page.click('#ed-json-apply');
+    assert.ok((await changeList(page)).includes('ESP32 module: starts hidden'), (await changeList(page)).join(' | '));
+    assert.ok((await changeList(page)).includes('USB-C port: left out'));
+    out = await copiedManifest(page);
+    assert.equal(out.parts.find((p) => p.id === 'usbc').omit, true);
+    await page.click('#edDone');
+    await partsShown(page, 7);
+    assert.equal(await page.isChecked('#part-module'), false);
     assert.deepEqual(errors, [], 'no page or console errors');
   } finally {
     await ctx.close();

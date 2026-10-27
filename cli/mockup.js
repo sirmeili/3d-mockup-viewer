@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildMockup, renderPage } from '../lib/build.js';
 import { renderPart } from '../lib/scad.js';
 import { writeOpenscadEdition } from '../lib/edition.js';
+import { gatherShare, shareLink, DEFAULT_SHARE_BASE, SHARE_NOTE_LENGTH, SHARE_MAX_LENGTH } from '../lib/share.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'package.json'), 'utf8'));
@@ -38,6 +39,12 @@ Usage
       Copy the empty viewer (and OpenSCAD runtime with --openscad) into <dir>. Use it to update
       the viewer in a project after upgrading this package.
 
+  mockup link <manifest.json> [--base <url>] [--lib <dir>]
+      Print a share link: the manifest and its .scad sources packed into the link itself, opened
+      read-only in the OpenSCAD viewer. Nothing is uploaded. Every part must come from OpenSCAD.
+      --base <url>       viewer the link opens (default: ${DEFAULT_SHARE_BASE})
+      --lib <dir>        library folder for include/use (repeatable); those files go in the link too
+
   mockup render <file.scad> -o <out.stl> [-D name=value ...] [--engine wasm|native] [--lib <dir>]
       Render one STL.
 
@@ -56,7 +63,7 @@ function parseArgs(argv) {
     else if (a.startsWith('--')) {
       const key = a.slice(2);
       const next = argv[i + 1];
-      if (['stl-dir', 'engine', 'title', 'scad', 'port', 'root'].includes(key)) { args[key] = next; i++; }
+      if (['stl-dir', 'engine', 'title', 'scad', 'port', 'root', 'base'].includes(key)) { args[key] = next; i++; }
       else args[key] = true;
     } else args._.push(a);
   }
@@ -159,6 +166,18 @@ async function main() {
     const dir = path.resolve(a._[0] || '.');
     const written = copyViewer(dir, !!a.openscad, a['embed-origin']);
     console.log(`wrote ${written.length} file(s) to ${dir}`);
+    return;
+  }
+
+  if (cmd === 'link') {
+    const manifest = a._[0];
+    if (!manifest) throw new Error('usage: mockup link <manifest.json> [--base <url>]');
+    const { payload, files } = gatherShare({ manifest, libs: a.lib, viewer: PKG.version });
+    const link = shareLink(a.base || DEFAULT_SHARE_BASE, payload);
+    if (link.length > SHARE_MAX_LENGTH) throw new Error(`the link would be ${(link.length / 1024).toFixed(1)} KB; share links stop at ${SHARE_MAX_LENGTH / 1024} KB. Use mockup build for this model.`);
+    console.log(link);
+    console.error(`${files.length} source file(s), ${(link.length / 1024).toFixed(1)} KB. Anyone with the link can read the full source.`);
+    if (link.length > SHARE_NOTE_LENGTH) console.error('note: some apps cut long links; check it opens before sending.');
     return;
   }
 
