@@ -730,6 +730,7 @@ for (const [vp, scheme] of [[VIEWPORTS[0], 'light'], [VIEWPORTS[1], 'dark']]) {
     try {
       const other = scheme === 'light' ? 'dark' : 'light';
       assert.ok(await page.isVisible('#shotBtn'), 'Screenshot shows on a top-level page');
+      assert.ok(await page.evaluate(() => document.getElementById('shotBox').nextElementSibling.id === 'openBox' && !!document.getElementById('shotBox').closest('header')), 'Screenshot sits left of Load files');
       assert.equal(await page.getAttribute(`#shotBg [data-bg="${scheme}"]`, 'aria-pressed'), 'true', 'the background starts on the page theme');
       await page.waitForTimeout(1000);
       const view = () => page.evaluate(() => { const c = document.getElementById('view'); return [c.width, c.height]; });
@@ -745,10 +746,16 @@ for (const [vp, scheme] of [[VIEWPORTS[0], 'light'], [VIEWPORTS[1], 'dark']]) {
       assert.equal(await page.textContent('#shotNote'), 'Downloaded esp32-sensor-box-preview.png (1600 × 1000).');
 
       await page.waitForTimeout(300);
+      await page.screenshot({ path: path.join(SHOTS, `screenshot-note-${vp.name}-${scheme}.png`) });
+      await page.waitForFunction(() => document.getElementById('shotNote').textContent === '', null, { timeout: 10000 }); // the note clears itself
       assert.deepEqual(await view(), beforeView, 'the canvas size is restored');
       assert.ok(beforeStage.equals(await page.locator('#stage').screenshot()), 'the view is the same after a capture');
 
       await page.click(`#shotBg [data-bg="${other}"]`);
+      await page.waitForTimeout(300);
+      assert.ok(!beforeStage.equals(await page.locator('#stage').screenshot()), 'the stage shows the chosen background');
+      assert.ok(await canvasColours(page) > 40, 'model still drawn');
+      await page.screenshot({ path: path.join(SHOTS, `screenshot-stage-${vp.name}-${other}.png`) });
       const second = await takeScreenshot(page, `screenshot-${vp.name}-${other}.png`);
       const [light, dark] = scheme === 'light' ? [first, second] : [second, first];
       assert.ok(light.image.corner > dark.image.corner + 100, `Light and Dark backgrounds differ: ${light.image.corner}, ${dark.image.corner}`);

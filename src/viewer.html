@@ -100,7 +100,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, label:focus-wit
 .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent); }
 .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; cursor: pointer; border-radius: 6px; }
 .toggle input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
-.shot-note { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.tag.shot-note { right: 12px; top: 12px; max-width: calc(100% - 170px); white-space: normal; overflow-wrap: anywhere; }
+.tag.shot-note:empty { display: none; }
 input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw; }
 
 .status { margin: 0; font-size: 13.5px; color: var(--warn); }
@@ -311,6 +312,16 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       <p class="sub" id="subtitle" hidden></p>
     </div>
     <div class="group">
+      <div class="group" id="shotBox" hidden>
+        <button class="btn" type="button" id="shotBtn" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          Screenshot
+        </button>
+        <div class="seg" role="group" aria-label="Screenshot background" id="shotBg">
+          <button type="button" data-bg="light" aria-pressed="false">Light</button>
+          <button type="button" data-bg="dark" aria-pressed="false">Dark</button>
+        </div>
+      </div>
       <div class="group" id="openBox" hidden>
         <button class="btn" id="openBtn" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/></svg>
@@ -331,6 +342,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     <canvas id="view" aria-label="Interactive 3D model. Drag to rotate, scroll or pinch to zoom, right-drag to pan."></canvas>
     <div class="tag dims" id="dims" hidden></div>
     <div class="tag hint" id="hint"><span class="wide">Drag to rotate · scroll to zoom · right-drag to pan</span><span class="narrow">Drag to rotate · pinch to zoom</span></div>
+    <div class="tag shot-note" id="shotNote" role="status"></div>
     <div class="tag load" id="loading">Loading model…</div>
     <div class="drop" id="drop" hidden>
       <div>Drop to load these files<small>STL, 3MF or GLB parts, plus an optional manifest.json</small></div>
@@ -359,17 +371,6 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       <input type="range" id="cutPos" min="0" max="1000" value="500" aria-label="Section cut position" hidden>
     </div>
     <label class="toggle"><input type="checkbox" id="edges" checked> Edges</label>
-    <div class="group" id="shotBox" hidden>
-      <button class="btn" type="button" id="shotBtn" disabled>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
-        Screenshot
-      </button>
-      <div class="seg" role="group" aria-label="Screenshot background" id="shotBg">
-        <button type="button" data-bg="light" aria-pressed="false">Light</button>
-        <button type="button" data-bg="dark" aria-pressed="false">Dark</button>
-      </div>
-      <span class="shot-note" id="shotNote" role="status"></span>
-    </div>
   </div>
 
   <p class="status" id="status" role="status"></p>
@@ -2726,24 +2727,25 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
   // ---------- Screenshot: the current view as a PNG download ----------
   const SHOT_WIDTH = 1600, SHOT_HEIGHT = 1000;
-  // a theme's colours, read by switching to it for a moment; nothing paints before it is switched back
+  // a theme's colours, read once by switching to it for a moment; nothing paints before it is switched back
+  const themeCache = {};
   function themeColors(theme) {
+    if (themeCache[theme]) return themeCache[theme];
     const root = document.documentElement, was = root.getAttribute('data-theme');
     root.setAttribute('data-theme', theme);
-    const colors = { from: cssColor('--stage-a'), to: cssColor('--stage-b'), edge: cssColor('--edge') };
+    themeCache[theme] = { from: cssColor('--stage-a'), to: cssColor('--stage-b'), edge: cssColor('--edge') };
     if (was === null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', was);
-    return colors;
+    return themeCache[theme];
   }
   // renders once at the fixed size, then restores the view in the same task, so the stage never shows it
   function captureStage(theme) {
     const colors = themeColors(theme);
-    const ratio = renderer.getPixelRatio(), size = renderer.getSize(new THREE.Vector2()), aspect = camera.aspect, edge = edgeMat.color.clone();
+    const ratio = renderer.getPixelRatio(), size = renderer.getSize(new THREE.Vector2()), aspect = camera.aspect;
     try {
       renderer.setPixelRatio(1);
       renderer.setSize(SHOT_WIDTH, SHOT_HEIGHT, false);
       camera.aspect = SHOT_WIDTH / SHOT_HEIGHT;
       camera.updateProjectionMatrix();
-      edgeMat.color.copy(lin(colors.edge));
       renderer.render(scene, camera);
       return stageImage(colors.from, colors.to);
     } finally {
@@ -2751,7 +2753,6 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       renderer.setSize(size.x, size.y, false);
       camera.aspect = aspect;
       camera.updateProjectionMatrix();
-      edgeMat.color.copy(edge);
       renderer.render(scene, camera);
     }
   }
@@ -2759,8 +2760,10 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     const name = String(currentManifest().name || '');
     return (/[a-z0-9]/i.test(name) ? slug(name) : 'mockup') + '-preview.png';
   }
+  let shotNoteTimer = null;
   function saveScreenshot() {
     const note = $('shotNote');
+    clearTimeout(shotNoteTimer);
     note.textContent = '';
     const failed = (e) => { note.textContent = 'Could not make the screenshot' + (e && e.message ? ': ' + e.message : '.'); };
     try {
@@ -2773,6 +2776,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
         note.textContent = 'Downloaded ' + name + ' (' + SHOT_WIDTH + ' × ' + SHOT_HEIGHT + ').';
+        shotNoteTimer = setTimeout(() => { note.textContent = ''; }, 6000);
       }, 'image/png');
     } catch (e) { failed(e); }
   }
@@ -2833,15 +2837,19 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
   // theme changes recolour the edge lines
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  const retint = () => { edgeMat.color.copy(lin(cssColor('--edge'))); showShotTheme(); };
+  const retint = () => showShotTheme();
   if (mq.addEventListener) mq.addEventListener('change', retint);
   new MutationObserver(retint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-  // Screenshot's background follows the page's theme until someone picks one
+  // the stage's background and edge lines follow the page's theme until someone picks one for Screenshot
   let shotPick = null;
   function shotTheme() { return shotPick || document.documentElement.getAttribute('data-theme') || (mq.matches ? 'dark' : 'light'); }
   function showShotTheme() {
     document.querySelectorAll('#shotBg [data-bg]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.bg === shotTheme())));
+    const picked = shotPick && themeColors(shotPick);
+    if (picked) { stage.style.setProperty('--stage-a', picked.from); stage.style.setProperty('--stage-b', picked.to); }
+    else { stage.style.removeProperty('--stage-a'); stage.style.removeProperty('--stage-b'); }
+    edgeMat.color.copy(lin(picked ? picked.edge : cssColor('--edge')));
   }
   $('shotBox').hidden = window.parent !== window || embedMode; // shown on shared mockups and pages opened from disk too
   $('shotBtn').addEventListener('click', saveScreenshot);

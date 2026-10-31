@@ -174,7 +174,7 @@ Each new load replaces the current model. If a load produces no parts, the stage
 ## 6. Viewer behaviour
 
 ### 6.1 Page layout
-One column, max 1080 px: header (eyebrow, title, subtitle, and on drop-in pages the **Load files** and **Edit manifest** buttons; embedded viewers show Edit manifest too), the stage (16:10, at least 320 px tall, at most 72 % of the viewport height), the control strip, a warning line, then the Parts panel beside the spec sheet (stacked below 760 px), and a footer note about units and axes. The OpenSCAD panel, when present, sits above the Parts panel.
+One column, max 1080 px: header (eyebrow, title, subtitle, **Screenshot** with its Light/Dark choice (6.16), and on drop-in pages the **Load files** and **Edit manifest** buttons; embedded viewers show Edit manifest too), the stage (16:10, at least 320 px tall, at most 72 % of the viewport height), the control strip, a warning line, then the Parts panel beside the spec sheet (stacked below 760 px), and a footer note about units and axes. The OpenSCAD panel, when present, sits above the Parts panel.
 
 ### 6.2 Scene and camera
 - The assembly is centred on its bounding box. Z-up models are rotated so Z points up on screen. When the manifest doesn't set `up`, a model is treated as Y-up only when every file is GLB.
@@ -273,12 +273,12 @@ A page whose address has `#m=<payload>` (a share link) shows the mockup in the l
 - The fragment stays in the address bar, so reloading works; changing it to another link reloads the page.
 
 ### 6.16 Screenshot
-**Screenshot**, at the end of the control strip, saves the current view as a PNG, mainly so a project's README can show the model as a picture that links to the live viewer (GitHub strips scripts and iframes; the pattern is in the README).
+**Screenshot**, in the header to the left of Load files, saves the current view as a PNG, mainly so a project's README can show the model as a picture that links to the live viewer (GitHub strips scripts and iframes; the pattern is in the README).
 - It captures what the stage shows: mode, camera, finish, section cut and which parts are showing. The size and hint tags aren't in the image. The image goes straight to the file; nothing is uploaded.
 - One fixed size, 1600 × 1000, on every device. It renders once at that size, then restores the view in the same task.
 - The background is opaque, using the stage gradient. No transparency: a dark model could get lost on a dark README.
-- A **Light / Dark** choice beside the button sets the image's background and edge line colour. It follows the page's theme until someone picks one. Dark finishes tend to be clearest on light, and light finishes on dark.
-- The download is named from the manifest's `name`, such as `rnet-bridge-preview.png`, or `mockup-preview.png` when the name has no Latin letters or digits. The note beside the button says what happened.
+- A **Light / Dark** choice beside the button sets the background and edge line colour of the stage and the image, so the stage previews what will be saved. Only the stage changes; the rest of the page keeps its theme. It follows the page's theme until someone picks one, and the pick lasts until the page is reloaded. Dark finishes tend to be clearest on light, and light finishes on dark.
+- The download is named from the manifest's `name`, such as `rnet-bridge-preview.png`, or `mockup-preview.png` when the name has no Latin letters or digits. A note on the stage says what happened, for a few seconds if it worked. It isn't in the image and doesn't move the page.
 - It shows on every page except inside a frame (so not in Claude artifacts or embeds) and in compact mode. Unlike Share link (7.5) it stays on shared mockups and pages opened from disk, because it changes nothing.
 - The image doesn't update when the model changes; it is retaken by hand. Planned item 6 covers generating images automatically.
 
