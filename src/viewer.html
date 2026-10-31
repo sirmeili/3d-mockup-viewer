@@ -100,6 +100,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, label:focus-wit
 .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent); }
 .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; cursor: pointer; border-radius: 6px; }
 .toggle input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.tag.shot-note { right: 12px; top: 12px; max-width: calc(100% - 170px); white-space: normal; overflow-wrap: anywhere; }
+.tag.shot-note:empty { display: none; }
 input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw; }
 
 .status { margin: 0; font-size: 13.5px; color: var(--warn); }
@@ -310,6 +312,16 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       <p class="sub" id="subtitle" hidden></p>
     </div>
     <div class="group">
+      <div class="group" id="shotBox" hidden>
+        <button class="btn" type="button" id="shotBtn" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          Screenshot
+        </button>
+        <div class="seg" role="group" aria-label="Screenshot background" id="shotBg">
+          <button type="button" data-bg="light" aria-pressed="false">Light</button>
+          <button type="button" data-bg="dark" aria-pressed="false">Dark</button>
+        </div>
+      </div>
       <div class="group" id="openBox" hidden>
         <button class="btn" id="openBtn" type="button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4"/></svg>
@@ -330,6 +342,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     <canvas id="view" aria-label="Interactive 3D model. Drag to rotate, scroll or pinch to zoom, right-drag to pan."></canvas>
     <div class="tag dims" id="dims" hidden></div>
     <div class="tag hint" id="hint"><span class="wide">Drag to rotate · scroll to zoom · right-drag to pan</span><span class="narrow">Drag to rotate · pinch to zoom</span></div>
+    <div class="tag shot-note" id="shotNote" role="status"></div>
     <div class="tag load" id="loading">Loading model…</div>
     <div class="drop" id="drop" hidden>
       <div>Drop to load these files<small>STL, 3MF or GLB parts, plus an optional manifest.json</small></div>
@@ -2370,6 +2383,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     renderHeader();
     buildFinishes(); renderParts(); renderSheet();
     $('edOpen').disabled = !state.parts.length;
+    $('shotBtn').disabled = !state.parts.length;
     if ($('editor').open) edRender();
   }
 
@@ -2697,14 +2711,74 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   // so it looks like the live view (used by <mockup-embed> while its 3D view is released)
   function snapshot() {
     renderer.render(scene, camera); // the WebGL buffer is only readable in the same task as a render
+    const out = stageImage(cssColor('--stage-a'), cssColor('--stage-b'));
+    return { image: out.toDataURL('image/jpeg', 0.85), width: out.width, height: out.height };
+  }
+  function stageImage(from, to) {
     const w = canvas.width, h = canvas.height;
     const out = document.createElement('canvas'); out.width = w; out.height = h;
     const g = out.getContext('2d');
     const bg = g.createRadialGradient(w * 0.5, h * 0.3, 0, w * 0.5, h * 0.3, Math.max(w, h) * 0.9);
-    bg.addColorStop(0, cssColor('--stage-a')); bg.addColorStop(1, cssColor('--stage-b'));
+    bg.addColorStop(0, from); bg.addColorStop(1, to);
     g.fillStyle = bg; g.fillRect(0, 0, w, h);
     g.drawImage(canvas, 0, 0);
-    return { image: out.toDataURL('image/jpeg', 0.85), width: w, height: h };
+    return out;
+  }
+
+  // ---------- Screenshot: the current view as a PNG download ----------
+  const SHOT_WIDTH = 1600, SHOT_HEIGHT = 1000;
+  // a theme's colours, read once by switching to it for a moment; nothing paints before it is switched back
+  const themeCache = {};
+  function themeColors(theme) {
+    if (themeCache[theme]) return themeCache[theme];
+    const root = document.documentElement, was = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', theme);
+    themeCache[theme] = { from: cssColor('--stage-a'), to: cssColor('--stage-b'), edge: cssColor('--edge') };
+    if (was === null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', was);
+    return themeCache[theme];
+  }
+  // renders once at the fixed size, then restores the view in the same task, so the stage never shows it
+  function captureStage(theme) {
+    const colors = themeColors(theme);
+    const ratio = renderer.getPixelRatio(), size = renderer.getSize(new THREE.Vector2()), aspect = camera.aspect;
+    try {
+      renderer.setPixelRatio(1);
+      renderer.setSize(SHOT_WIDTH, SHOT_HEIGHT, false);
+      camera.aspect = SHOT_WIDTH / SHOT_HEIGHT;
+      camera.updateProjectionMatrix();
+      renderer.render(scene, camera);
+      return stageImage(colors.from, colors.to);
+    } finally {
+      renderer.setPixelRatio(ratio);
+      renderer.setSize(size.x, size.y, false);
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+      renderer.render(scene, camera);
+    }
+  }
+  function shotFileName() {
+    const name = String(currentManifest().name || '');
+    return (/[a-z0-9]/i.test(name) ? slug(name) : 'mockup') + '-preview.png';
+  }
+  let shotNoteTimer = null;
+  function saveScreenshot() {
+    const note = $('shotNote');
+    clearTimeout(shotNoteTimer);
+    note.textContent = '';
+    const failed = (e) => { note.textContent = 'Could not make the screenshot' + (e && e.message ? ': ' + e.message : '.'); };
+    try {
+      const name = shotFileName();
+      captureStage(shotTheme()).toBlob((blob) => {
+        if (!blob) { failed(); return; }
+        const url = URL.createObjectURL(blob);
+        // the only <a download>: this control never shows in a frame, where downloads fail silently (spec section 4, rule 2)
+        const a = document.createElement('a'); a.href = url; a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        note.textContent = 'Downloaded ' + name + ' (' + SHOT_WIDTH + ' × ' + SHOT_HEIGHT + ').';
+        shotNoteTimer = setTimeout(() => { note.textContent = ''; }, 6000);
+      }, 'image/png');
+    } catch (e) { failed(e); }
   }
 
   // compact mode: which controls show (?controls=show,view,finish,cut or none) and the starting state (?mode, ?view, ?finish)
@@ -2763,9 +2837,27 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
   // theme changes recolour the edge lines
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  const retint = () => edgeMat.color.copy(lin(cssColor('--edge')));
+  const retint = () => showShotTheme();
   if (mq.addEventListener) mq.addEventListener('change', retint);
   new MutationObserver(retint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // the stage's background and edge lines follow the page's theme until someone picks one for Screenshot
+  let shotPick = null;
+  function shotTheme() { return shotPick || document.documentElement.getAttribute('data-theme') || (mq.matches ? 'dark' : 'light'); }
+  function showShotTheme() {
+    document.querySelectorAll('#shotBg [data-bg]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.bg === shotTheme())));
+    const picked = shotPick && themeColors(shotPick);
+    if (picked) { stage.style.setProperty('--stage-a', picked.from); stage.style.setProperty('--stage-b', picked.to); }
+    else { stage.style.removeProperty('--stage-a'); stage.style.removeProperty('--stage-b'); }
+    edgeMat.color.copy(lin(picked ? picked.edge : cssColor('--edge')));
+  }
+  $('shotBox').hidden = window.parent !== window || embedMode; // shown on shared mockups and pages opened from disk too
+  $('shotBtn').addEventListener('click', saveScreenshot);
+  $('shotBg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-bg]');
+    if (b) { shotPick = b.dataset.bg; showShotTheme(); }
+  });
+  showShotTheme();
 
   startEmbedding(loadEmbedded().then(applyStartState).catch((e) => {
     const message = 'Could not load the model: ' + (e && e.message ? e.message : e);

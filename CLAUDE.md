@@ -50,7 +50,7 @@ When a feature or change is done, including a spec-only one, push the branch and
 
 These come from where it is published (Claude artifacts). Breaking them fails silently.
 - External scripts only from cdnjs.cloudflare.com, cdn.jsdelivr.net/npm, unpkg.com, pinned to exact versions. Stylesheets only from Google Fonts. Everything else inline.
-- No `alert`/`confirm`/`prompt`, no `window.print`, no `<a download>` (downloads are blocked). Clipboard writes must happen in the click handler and need a fallback (see `copyManifest`).
+- No `alert`/`confirm`/`prompt`, no `window.print`, no `<a download>` (downloads are blocked; the one exception is Screenshot, which never shows in a frame). Clipboard writes must happen in the click handler and need a fallback (see `copyManifest`).
 - Colours are CSS tokens on `:root` with dark-mode overrides under `@media (prefers-color-scheme: dark) :root:not([data-theme="light"])` and `:root[data-theme="dark"]`. No literal colours in components.
 - Must work at about 400 px wide with no horizontal page scroll. Side gutters use `max(16px, env(safe-area-inset-left, 0px))`.
 - `localStorage` is only for per-viewer conveniences (Arrange edits, open sections), always wrapped in try/catch.
