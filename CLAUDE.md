@@ -37,6 +37,15 @@ node cli/mockup.js serve dist --port 8080
 
 After changing the viewer, run `npm run build && npm run test:browser` (test/browser/smoke.test.js). It loads every dist page in headless Chromium at 1200 px and 400 px, in light and dark mode. It checks that the canvas is actually drawn, there are no console errors and no sideways scroll, and that exploded, see-inside, section cut, Arrange and an OpenSCAD re-render all work. The embed tests run `test/browser/embed-host.html` (embedding API, through `embed.mjs`) and `test/browser/embeds-page.html` (20 `<mockup-embed>`s, through the classic `embed.js`) from a second local server. Screenshots land in `test-results/`; look at them. Without CDN access, set `MOCKUP_TEST_CDN_DIR` (see the test file). CI runs the same suite on every push and before every release. Extend it when you add a feature.
 
+## Pull requests
+
+When a feature or change is done, including a spec-only one, push the branch and open a PR without being asked. When a spec PR comes before a build, wait until the owner accepts it before starting the build. The description must suit the change and answer these four questions, as headings:
+
+- **What changed?** A bulleted list of technical changes.
+- **Why was the work completed?** The underlying rationale for the approach taken.
+- **What part of the spec was implemented?** Direct reference to section numbers or features in `docs/SPEC.md`.
+- **How was it tested?** Details on unit tests, mock data used, and edge cases handled.
+
 ## Rules for the viewer page
 
 These come from where it is published (Claude artifacts). Breaking them fails silently.

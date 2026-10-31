@@ -122,7 +122,7 @@ Node: `engines` requires 20.6 or newer; CI uses Node 22. The only dev dependency
 These come from where the pages are published, mainly Claude artifacts. Breaking them fails silently there, so they are hard rules for every page in `dist/`:
 
 1. External scripts only from cdnjs.cloudflare.com, cdn.jsdelivr.net/npm or unpkg.com, each pinned to an exact version. Stylesheets only from Google Fonts. Everything else inline.
-2. No `alert`, `confirm`, `prompt`, `window.print` or `<a download>`. (Planned item 3, Save, needs a controlled exception for self-hosted pages; see there.) Clipboard writes happen inside the click handler, with a fallback (Copy manifest shows the JSON in a text box when the clipboard is blocked).
+2. No `alert`, `confirm`, `prompt`, `window.print` or `<a download>`. (Planned items 3, Save, and 9, Screenshot, need a controlled exception for self-hosted pages; see there.) Clipboard writes happen inside the click handler, with a fallback (Copy manifest shows the JSON in a text box when the clipboard is blocked).
 3. Colours are CSS custom properties on `:root`, redefined for dark mode under both `@media (prefers-color-scheme: dark) :root:not([data-theme="light"])` and `:root[data-theme="dark"]`. Components use only the tokens. three.js colours are converted from sRGB to linear (`lin()`), and the edge colour follows `--edge` when the theme changes.
 4. Works at about 400 px wide with no horizontal page scroll. Side gutters use `max(16px, env(safe-area-inset-left, 0px))`.
 5. `localStorage` holds only per-viewer conveniences (Arrange edits, which OpenSCAD panel sections are open). Every access is wrapped in try/catch, and the page works without it.
@@ -449,6 +449,32 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 
 ### 6. Static image of a mockup (for places that strip scripts)
 Have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer, e.g. in a GitHub README. Node has no WebGL, so decide first how to render: a small software rasterizer in Node (no new dependency, plainer look) or headless Chromium through Playwright when installed (exact match, optional dependency and browser download). Split out of item 5 on 2026-10-24.
+
+### 9. Screenshot button
+A **Screenshot** button saves the current view as a PNG, mainly so a project's README can show the model as a picture that links to the live viewer. GitHub strips scripts and iframes from READMEs, so this is the closest a README can get:
+
+```markdown
+[![RNET Bridge](hardware/enclosure/preview.png)](https://sirmeili.github.io/3d-mockup-viewer/openscad/viewer.html?manifest=https://raw.githubusercontent.com/sirmeili/rnet-bridge/refs/heads/main/hardware/enclosure/manifest.json)
+```
+
+Added 2026-10-31; the decisions below are the owner's, the same day, after comparing samples of a real model on both backgrounds on light and dark README pages.
+
+- **What it captures:** exactly what the stage shows: mode, camera, finish, section cut and which parts are showing. The size and hint tags on the stage are left out. The image is written straight to the file; nothing is uploaded (section 2).
+- **Size:** one fixed size, 1600 × 1000, on every device. It renders once at that size, then restores the view. On a stage that isn't 16:10, such as a phone, the framing differs slightly from the screen.
+- **Background:** opaque, using the viewer's stage gradient. No transparency: a dark model could get lost on a dark README, and the result would depend on a page the viewer doesn't control.
+- **Light/Dark choice:** a small choice beside the button sets the image's background and starts on the page's current theme. The best background depends on the finish: in the samples, dark finishes were clearest on light and light finishes on dark. Edge lines use the colour for the chosen background. Someone who wants both can take one of each and write the `<picture>` markup by hand.
+- **Where it shows:** every page except inside a frame, which removes it from Claude artifacts and embeds, and compact mode (`?embed`). Unlike Share link (section 7.5) it stays on shared mockups and pages opened from disk, because it changes nothing.
+- **Saving:** a download named from the manifest's `name`, such as `rnet-bridge-preview.png`. This needs a second exception to section 4 rule 2. It is safe because the button never shows in a frame, where downloads fail silently. The note beside the button says what happened.
+- **Keeping it current:** the image doesn't update when the model changes; it is retaken by hand. Planned item 6 stays separate, for images generated automatically by `mockup build`.
+- **Not included:** a tighter automatic camera fit. Long, thin models fill little of the image (about 40 % of the width in the samples), but the camera can be zoomed in before capturing.
+- **Docs:** add the README pattern above to the project's README.
+- **Tests:** browser tests at 1200 px and 400 px:
+  - The download (Playwright captures it) is a 1600 × 1000 PNG with the expected name, and it is opaque with more than the background's colours in it.
+  - The Light and Dark choices give different backgrounds.
+  - Section cut and an unticked part show in the image.
+  - The view is the same before and after a capture.
+  - The button is hidden in a frame and in compact mode, and present on a shared mockup.
+- **When done:** remove this item. Add the button to section 6, the exception to section 4 rule 2, and the fixed size to section 11.
 
 ### Outside this repository
 - **Tracker integration** (`ai-project-tracker`): decide where a project's mockup lives and how an item shows one, then use the embedding API. The tracker has no mockup or file storage yet; this belongs in its own backlog.
