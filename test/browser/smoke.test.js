@@ -508,6 +508,7 @@ async function checkShared(page, errors, dims, shot, parts = 9) {
     meta: document.getElementById('scadMeta').textContent, foot: document.getElementById('foot').textContent
   }));
   assert.deepEqual(ro.shown, [], 'editing controls hidden');
+  assert.ok(await page.isVisible('#shotBtn'), 'Screenshot stays on a shared mockup');
   assert.ok(ro.locked, 'OpenSCAD fields locked');
   assert.match(ro.meta, /view only/);
   assert.match(ro.foot, /Opened from a share link: view only/);
@@ -607,6 +608,7 @@ test('share link: hidden inside a frame; explains mesh parts; falls back when th
     const frame = await (await page.waitForSelector('iframe')).contentFrame();
     await frame.waitForFunction(() => document.querySelectorAll('.pname').length >= 9 && document.getElementById('loading').hidden, null, { timeout: 60000 });
     assert.ok(await frame.isHidden('#scadShare'), 'no Share link in a frame');
+    assert.ok(await frame.isHidden('#shotBox'), 'no Screenshot in a frame');
 
     // the clipboard is blocked: the link is shown, selected, to copy by hand
     await page.addInitScript(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('blocked')); });
@@ -701,6 +703,76 @@ test('part visibility: hidden and omit from the manifest, the checkbox as an edi
 });
 
 // ---------- compact mode (?embed), what <mockup-embed> shows ----------
+// press Screenshot; returns the download's name and bytes, and what the image holds, decoded by the browser
+async function takeScreenshot(page, keep) {
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#shotBtn')]);
+  const file = fs.readFileSync(await download.path());
+  if (keep) fs.writeFileSync(path.join(SHOTS, keep), file);
+  const image = await page.evaluate(async (b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data;
+    const seen = new Set(); let opaque = true;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] !== 255) opaque = false;
+      seen.add((d[i] >> 3) << 10 | (d[i + 1] >> 3) << 5 | (d[i + 2] >> 3));
+    }
+    return { width: c.width, height: c.height, opaque, colours: seen.size, corner: d[0] + d[1] + d[2] };
+  }, file.toString('base64'));
+  return { name: download.suggestedFilename(), file, image };
+}
+
+for (const [vp, scheme] of [[VIEWPORTS[0], 'light'], [VIEWPORTS[1], 'dark']]) {
+  test(`screenshot: downloads the current view at a fixed size (${vp.name}, ${scheme})`, async () => {
+    const { ctx, page, errors } = await openDemo(vp, scheme);
+    try {
+      const other = scheme === 'light' ? 'dark' : 'light';
+      assert.ok(await page.isVisible('#shotBtn'), 'Screenshot shows on a top-level page');
+      assert.equal(await page.getAttribute(`#shotBg [data-bg="${scheme}"]`, 'aria-pressed'), 'true', 'the background starts on the page theme');
+      await page.waitForTimeout(1000);
+      const view = () => page.evaluate(() => { const c = document.getElementById('view'); return [c.width, c.height]; });
+      const beforeView = await view(), beforeStage = await page.locator('#stage').screenshot();
+
+      const first = await takeScreenshot(page, `screenshot-${vp.name}-${scheme}.png`);
+      assert.equal(first.name, 'esp32-sensor-box-preview.png');
+      assert.deepEqual(first.file.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), 'it is a PNG');
+      assert.equal(first.image.width, 1600);
+      assert.equal(first.image.height, 1000);
+      assert.ok(first.image.opaque, 'no transparent pixels');
+      assert.ok(first.image.colours > 40, 'more than the background: ' + first.image.colours);
+      assert.equal(await page.textContent('#shotNote'), 'Downloaded esp32-sensor-box-preview.png (1600 × 1000).');
+
+      await page.waitForTimeout(300);
+      assert.deepEqual(await view(), beforeView, 'the canvas size is restored');
+      assert.ok(beforeStage.equals(await page.locator('#stage').screenshot()), 'the view is the same after a capture');
+
+      await page.click(`#shotBg [data-bg="${other}"]`);
+      const second = await takeScreenshot(page, `screenshot-${vp.name}-${other}.png`);
+      const [light, dark] = scheme === 'light' ? [first, second] : [second, first];
+      assert.ok(light.image.corner > dark.image.corner + 100, `Light and Dark backgrounds differ: ${light.image.corner}, ${dark.image.corner}`);
+      assert.equal(await page.getAttribute('html', 'data-theme'), null, 'the page theme is left alone');
+
+      await page.click('#cut-x');
+      await page.waitForTimeout(300);
+      const cut = await takeScreenshot(page);
+      assert.ok(!cut.file.equals(second.file), 'the section cut shows in the image');
+      await page.locator('#parts input[type="checkbox"]').first().click();
+      await page.waitForTimeout(300);
+      const unticked = await takeScreenshot(page);
+      assert.ok(!unticked.file.equals(cut.file), 'an unticked part shows in the image');
+
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert.ok(over <= 1, `page scrolls sideways by ${over}px`);
+      await page.screenshot({ path: path.join(SHOTS, `screenshot-page-${vp.name}-${scheme}.png`), fullPage: true });
+      assert.deepEqual(errors, [], 'no page or console errors');
+    } finally {
+      await ctx.close();
+    }
+  });
+}
+
 test('compact mode: model and chosen controls only, with the starting state', async () => {
   const ctx = await browser.newContext({ viewport: { width: 600, height: 340 } });
   await routeCdn(ctx);
@@ -712,7 +784,7 @@ test('compact mode: model and chosen controls only, with the starting state', as
     await page.goto(BASE + 'viewer.html?embed&manifest=examples/sensor-box/manifest.json&controls=show,finish&mode=exploded&view=top&finish=Slate%20blue&theme=dark');
     await page.waitForFunction(() => document.getElementById('loading').hidden, null, { timeout: 60000 });
     assert.equal(await page.getAttribute('html', 'data-theme'), 'dark');
-    for (const sel of ['header', '#lower', '#status', '#foot', '#openBox', '#viewSeg', '#cutSeg', '#edges']) {
+    for (const sel of ['header', '#lower', '#status', '#foot', '#openBox', '#viewSeg', '#cutSeg', '#edges', '#shotBox']) {
       assert.equal(await page.locator(sel).isVisible(), false, sel + ' is hidden');
     }
     for (const sel of ['#stage', '#m-exploded', '#f-slate-blue']) assert.ok(await page.locator(sel).isVisible(), sel + ' shows');

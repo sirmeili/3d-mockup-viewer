@@ -100,6 +100,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, label:focus-wit
 .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent); }
 .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; cursor: pointer; border-radius: 6px; }
 .toggle input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.shot-note { font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
 input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw; }
 
 .status { margin: 0; font-size: 13.5px; color: var(--warn); }
@@ -358,6 +359,17 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
       <input type="range" id="cutPos" min="0" max="1000" value="500" aria-label="Section cut position" hidden>
     </div>
     <label class="toggle"><input type="checkbox" id="edges" checked> Edges</label>
+    <div class="group" id="shotBox" hidden>
+      <button class="btn" type="button" id="shotBtn" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h4l2-3h4l2 3h4v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        Screenshot
+      </button>
+      <div class="seg" role="group" aria-label="Screenshot background" id="shotBg">
+        <button type="button" data-bg="light" aria-pressed="false">Light</button>
+        <button type="button" data-bg="dark" aria-pressed="false">Dark</button>
+      </div>
+      <span class="shot-note" id="shotNote" role="status"></span>
+    </div>
   </div>
 
   <p class="status" id="status" role="status"></p>
@@ -2370,6 +2382,7 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
     renderHeader();
     buildFinishes(); renderParts(); renderSheet();
     $('edOpen').disabled = !state.parts.length;
+    $('shotBtn').disabled = !state.parts.length;
     if ($('editor').open) edRender();
   }
 
@@ -2697,14 +2710,71 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
   // so it looks like the live view (used by <mockup-embed> while its 3D view is released)
   function snapshot() {
     renderer.render(scene, camera); // the WebGL buffer is only readable in the same task as a render
+    const out = stageImage(cssColor('--stage-a'), cssColor('--stage-b'));
+    return { image: out.toDataURL('image/jpeg', 0.85), width: out.width, height: out.height };
+  }
+  function stageImage(from, to) {
     const w = canvas.width, h = canvas.height;
     const out = document.createElement('canvas'); out.width = w; out.height = h;
     const g = out.getContext('2d');
     const bg = g.createRadialGradient(w * 0.5, h * 0.3, 0, w * 0.5, h * 0.3, Math.max(w, h) * 0.9);
-    bg.addColorStop(0, cssColor('--stage-a')); bg.addColorStop(1, cssColor('--stage-b'));
+    bg.addColorStop(0, from); bg.addColorStop(1, to);
     g.fillStyle = bg; g.fillRect(0, 0, w, h);
     g.drawImage(canvas, 0, 0);
-    return { image: out.toDataURL('image/jpeg', 0.85), width: w, height: h };
+    return out;
+  }
+
+  // ---------- Screenshot: the current view as a PNG download ----------
+  const SHOT_WIDTH = 1600, SHOT_HEIGHT = 1000;
+  // a theme's colours, read by switching to it for a moment; nothing paints before it is switched back
+  function themeColors(theme) {
+    const root = document.documentElement, was = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', theme);
+    const colors = { from: cssColor('--stage-a'), to: cssColor('--stage-b'), edge: cssColor('--edge') };
+    if (was === null) root.removeAttribute('data-theme'); else root.setAttribute('data-theme', was);
+    return colors;
+  }
+  // renders once at the fixed size, then restores the view in the same task, so the stage never shows it
+  function captureStage(theme) {
+    const colors = themeColors(theme);
+    const ratio = renderer.getPixelRatio(), size = renderer.getSize(new THREE.Vector2()), aspect = camera.aspect, edge = edgeMat.color.clone();
+    try {
+      renderer.setPixelRatio(1);
+      renderer.setSize(SHOT_WIDTH, SHOT_HEIGHT, false);
+      camera.aspect = SHOT_WIDTH / SHOT_HEIGHT;
+      camera.updateProjectionMatrix();
+      edgeMat.color.copy(lin(colors.edge));
+      renderer.render(scene, camera);
+      return stageImage(colors.from, colors.to);
+    } finally {
+      renderer.setPixelRatio(ratio);
+      renderer.setSize(size.x, size.y, false);
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+      edgeMat.color.copy(edge);
+      renderer.render(scene, camera);
+    }
+  }
+  function shotFileName() {
+    const name = String(currentManifest().name || '');
+    return (/[a-z0-9]/i.test(name) ? slug(name) : 'mockup') + '-preview.png';
+  }
+  function saveScreenshot() {
+    const note = $('shotNote');
+    note.textContent = '';
+    const failed = (e) => { note.textContent = 'Could not make the screenshot' + (e && e.message ? ': ' + e.message : '.'); };
+    try {
+      const name = shotFileName();
+      captureStage(shotTheme()).toBlob((blob) => {
+        if (!blob) { failed(); return; }
+        const url = URL.createObjectURL(blob);
+        // the only <a download>: this control never shows in a frame, where downloads fail silently (spec section 4, rule 2)
+        const a = document.createElement('a'); a.href = url; a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        note.textContent = 'Downloaded ' + name + ' (' + SHOT_WIDTH + ' × ' + SHOT_HEIGHT + ').';
+      }, 'image/png');
+    } catch (e) { failed(e); }
   }
 
   // compact mode: which controls show (?controls=show,view,finish,cut or none) and the starting state (?mode, ?view, ?finish)
@@ -2763,9 +2833,23 @@ input[type="range"] { accent-color: var(--accent); width: 160px; max-width: 40vw
 
   // theme changes recolour the edge lines
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  const retint = () => edgeMat.color.copy(lin(cssColor('--edge')));
+  const retint = () => { edgeMat.color.copy(lin(cssColor('--edge'))); showShotTheme(); };
   if (mq.addEventListener) mq.addEventListener('change', retint);
   new MutationObserver(retint).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // Screenshot's background follows the page's theme until someone picks one
+  let shotPick = null;
+  function shotTheme() { return shotPick || document.documentElement.getAttribute('data-theme') || (mq.matches ? 'dark' : 'light'); }
+  function showShotTheme() {
+    document.querySelectorAll('#shotBg [data-bg]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.bg === shotTheme())));
+  }
+  $('shotBox').hidden = window.parent !== window || embedMode; // shown on shared mockups and pages opened from disk too
+  $('shotBtn').addEventListener('click', saveScreenshot);
+  $('shotBg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-bg]');
+    if (b) { shotPick = b.dataset.bg; showShotTheme(); }
+  });
+  showShotTheme();
 
   startEmbedding(loadEmbedded().then(applyStartState).catch((e) => {
     const message = 'Could not load the model: ' + (e && e.message ? e.message : e);
