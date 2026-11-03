@@ -461,6 +461,40 @@ Give the viewer a **Save** button beside **Copy manifest** that writes `manifest
 ### 6. Static image of a mockup (for places that strip scripts)
 Have `mockup build` optionally write a PNG (and maybe a short turntable GIF) to use as an image linking to the live viewer, e.g. in a GitHub README. Node has no WebGL, so decide first how to render: a small software rasterizer in Node (no new dependency, plainer look) or headless Chromium through Playwright when installed (exact match, optional dependency and browser download). Split out of item 5 on 2026-10-24.
 
+### 10. Edit list values in the OpenSCAD panel
+Models keep positions, sizes and tables in lists, such as `pipe_leds = [[1.3, 17.0, "PWR"], [1.3, 23.0, "LNK"], [1.3, 29.0, "ACT"]];`. Section 7.2 skips them today, so they can't be changed in the viewer. Make literal lists editable, as OpenSCAD's own Customizer does.
+
+Added 2026-11-03; the decisions below are the owner's, the same day.
+
+- **Which assignments:** a top-level assignment whose whole value is a literal list: numbers, double-quoted strings, `true`, `false`, `undef` and lists of those, nested to any depth, including the empty list. Anything else stays skipped as now: expressions (`[esp_y0 + 52, 10]`), names of other variables, list comprehensions (`[for …]`) and ranges (`[0:10]`). The same section and Hidden rules apply (7.2).
+- **Lists over several lines:** an assignment may continue on following lines (indented or not) until its brackets close and the `;` comes. Comments inside it are ignored. The hint comment is a comment line just above, or a trailing comment after the `;`.
+- **Reading values safely:** the value is read with a small parser of that grammar, not by evaluating it. Lines are split into assignments and comments outside strings only, which also fixes plain string values: today a `;` or `//` inside a string cuts the line short. Numbers are OpenSCAD's forms (`1`, `-2.5`, `.5`, `1e3`); strings take OpenSCAD's escapes (`\"`, `\\`, `\n`, `\t`, `\r`, `\x41`, `☺`, `\U01F600`). No trailing commas.
+- **Two kinds of field, chosen from the default value's shape,** because a list's meaning (position, size, table) can't be known from the file:
+  - **A flat list of 2 to 4 numbers** (`lit_led_board = [6.0, 6.0, 2.91]`) shows one number box per item in a row, with a fixed count, like the Customizer. No X/Y/Z labels, since the numbers may not be coordinates. A trailing `// [min:max]` or `// [min:step:max]` applies to every box. The step follows the number rule in 7.2 (1 if every item is a whole number, else 0.1).
+  - **Every other list** (nested lists, lists with strings, `undef` or booleans, number lists of 1 or more than 4, the empty list) shows a text box with the value as the source writes it. It wraps and grows with its content, stays within the panel at 400 px, and Enter renders, like other fields.
+  - A dropdown hint (`// [a, b]`) on a list is ignored, and isn't shown as a hint either.
+  - Accepted limit: a short number list whose length should change (`vent_positions = [10, 20, 30]`, to add a fourth) gets fixed boxes. The author can write it as a nested list or keep it hidden. No per-field toggle and no new comment syntax, so models stay plain OpenSCAD.
+- **Only literals in the text box.** Typed text must parse with the same grammar. While it doesn't, the field gets a `--warn` outline and a line under it saying what is wrong (for example "Missing ]" or "Only numbers, "text", true, false, undef and [lists] here"), it keeps its last good value, and Render and Share link stay disabled with a note pointing to the field. Reset values, or fixing the text, clears it. This also means a value can never slip extra OpenSCAD code into a render, which matters because values arrive from share links and embedding hosts too.
+- **Changed or not:** fields compare parsed values, not text. Whitespace, line breaks and `17.0` versus `17` don't count as changes; the highlight, the count and the `-D` overrides follow that. Number boxes are compared item by item.
+- **Passing to OpenSCAD:** a changed list goes in as `-D name=[…]`, written from the parsed value (numbers in shortest form, strings with escapes, `undef` for an empty slot).
+- **Values everywhere else** are JSON: a list is an array, `undef` is `null`. That covers:
+  - **Share links** (7.5): `values` may hold arrays. Opening a link applies a list value only when it parses and, for number boxes, has the same count; others are dropped as today's type mismatches are. No format version change: links always open in the latest viewer.
+  - **Embedding API** (`scad.setValues`): a list value must be an array of finite numbers, strings, booleans, `null` and arrays of those; for number boxes, numbers only and the same count. Otherwise `bad-values` with "(expects a list of N numbers)" or "(expects a list)". `{ values }` returns arrays. Additive, so protocol version 1 stays. Update docs/embedding.md.
+  - **Manifest `scad.defines`:** arrays (and `null`) are written as OpenSCAD lists (and `undef`) in the browser too. Today the OpenSCAD edition writes `[[1.3, 17, "PWR"]]` as `1.3,17,PWR`. The manifest editor's "Defines (-D values)" field reads nested lists and `undef` with the same parser (today it reads only flat lists).
+  - **CLI:** `scadLiteral` writes `null` as `undef`. `mockup render -D name=value` reads OpenSCAD literals with the same grammar first (so `.5` and `undef` work), then JSON, else a string.
+- **Two copies of the parser,** like the share-link encoder: one in `viewer.html`, exposed to the add-on on `window.mockupViewer` and used by the manifest editor, and one in `lib/scad.js`, exported for the CLI. Keep them in step.
+- **Tests:**
+  - Unit (`lib/scad.js`): the grammar (nested lists, escapes, `.5`, `1e3`, `undef`, empty list; rejects expressions, names, ranges, comprehensions, trailing commas, unclosed brackets, text after the value), `scadLiteral` round trips, and `mockup render -D` with a nested list.
+  - Browser, with a test-only `.scad` fixture that has a nested list, a string list, a 3-number list with a range hint, a 5-number list, a list over several lines with comments, a string containing `;` and `//`, an expression list and a comprehension (the last two must not appear):
+    - The right field kinds appear, and the skipped ones don't.
+    - Reformatting a text box isn't a change; a real edit is highlighted, counted and changes the render.
+    - Bad text shows the message and outline and disables Render and Share link; Reset clears it.
+    - `scad.setValues` accepts good arrays, rejects a wrong count and a non-list, and returns arrays.
+    - A share link carries a list value and opening it applies it.
+    - A manifest part's nested-list `defines` renders.
+    - At 400 px in light and dark, the text box and the number row cause no sideways scroll.
+- **When done:** remove this item. Update 7.2 (field kinds, the grammar, multi-line assignments), 7.5 and 9 (list values), 8.3 (`mockup render -D`), 6.11 (the defines field), and docs/embedding.md.
+
 ### Outside this repository
 - **Tracker integration** (`ai-project-tracker`): decide where a project's mockup lives and how an item shows one, then use the embedding API. The tracker has no mockup or file storage yet; this belongs in its own backlog.
 
