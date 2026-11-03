@@ -45,6 +45,12 @@ npx mockup serve mockup                              # http://localhost:8080/vie
 - `mockup/viewer.html?manifest=manifest.json` loads the manifest and part files live. Use it when the project already serves files, such as a project tracker.
 - To show a mockup inside another page, like an image: `<script src=".../embed.js"></script>` and `<mockup-embed src="mockup/manifest.json"></mockup-embed>`. To drive the viewer from another app (load models, switch views, save Arrange edits), use the embedding API. Both are in [docs/embedding.md](docs/embedding.md).
 - To send an OpenSCAD mockup to someone: `npx mockup link mockup/manifest.json` prints a link to the GitHub Pages viewer with the manifest and `.scad` sources packed into it (after `#`, so it never reaches a server). It opens read-only. On a self-hosted OpenSCAD viewer, the **Share link** button does the same from the page. Only OpenSCAD parts and text files fit; anyone with the link can read the source.
+- To show a model in a README, which can't run scripts: press **Screenshot** in the viewer (it saves a 1600 × 1000 PNG), commit the image, and link it to the live viewer:
+
+  ```markdown
+  [![RNET Bridge](hardware/enclosure/preview.png)](https://sirmeili.github.io/3d-mockup-viewer/openscad/viewer.html?manifest=https://raw.githubusercontent.com/sirmeili/rnet-bridge/refs/heads/main/hardware/enclosure/manifest.json)
+  ```
+
 - `--openscad` on `init`, `build` or `viewer` uses the OpenSCAD edition, so values can be edited and re-rendered in the page. Live loading renders any part whose STL is missing, straight from the `.scad` file. Serve from the project root (`npx mockup serve .`, then open `/mockup/viewer.html?manifest=manifest.json`) so the page can reach the `.scad` file.
 
 To upgrade: change the tag in `package.json`, reinstall, then run `npx mockup viewer mockup` to refresh the copied viewer.
