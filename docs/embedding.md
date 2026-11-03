@@ -99,8 +99,8 @@ Every command method returns a promise. It resolves with the viewer's result, or
 | `setArrange(on)` | Opens or closes Arrange. |
 | `getManifest()` | The full current manifest, including Arrange edits: what **Copy manifest** produces. |
 | `snapshot()` | A still of the current view: `{ image, width, height }`, where `image` is a JPEG data URL (the model over the stage's background) and the size is in device pixels. |
-| `scad.setValues({ name: value })` | OpenSCAD edition. Sets editable top-level values. Numbers, booleans and strings must match each value's type. It's all or nothing: one bad name or type and nothing changes. Resolves with `{ values }`, every current value. Doesn't render. |
-| `scad.render()` | OpenSCAD edition. Re-renders every part with the current values. Resolves with a model summary. |
+| `scad.setValues({ name: value })` | OpenSCAD edition. Sets editable top-level values. Numbers, booleans and strings must match each value's type. Lists are arrays, with `null` for `undef`: a list shown as a row of number boxes (2 to 4 numbers) takes numbers only, with the same count, and any other list takes an array of numbers, strings, booleans, `null` and arrays of those. It's all or nothing: one bad name or type and nothing changes. Resolves with `{ values }`, every current value, lists as arrays. Doesn't render. |
+| `scad.render()` | OpenSCAD edition. Re-renders every part with the current values. Resolves with a model summary. Refused with `bad-values` while someone has typed a list into the viewer's panel that can't be read. |
 | `send(type, body)` | Sends a raw message (see [Protocol](#protocol)). |
 | `on(event, fn)` / `off(event, fn)` | Event listeners. `on` returns an unsubscribe function. |
 | `destroy()` | Removes the iframe and rejects pending commands. |
@@ -142,7 +142,7 @@ URL strings are resolved against the host page before they are sent, so `load('m
 | `no-model` | The command needs a loaded model. |
 | `no-parts` | `load` finished without any parts. `error.warnings` says why. |
 | `unsupported` | `scad.*` sent to the standard edition. |
-| `no-scad`, `bad-values` | `scad.setValues`: no OpenSCAD model loaded, or names and types that don't match. |
+| `no-scad`, `bad-values` | `scad.setValues`: no OpenSCAD model loaded, or names and types that don't match (the message says what each one expects, such as "a list of 3 numbers"). `scad.render`: a list in the panel can't be read. |
 | `render-failed` | `scad.render` produced no geometry. The viewer's "OpenSCAD output" panel has the log. |
 | `destroyed` | (helper) `destroy()` was called. |
 | `failed` | Anything else, such as a URL that returned 404. |

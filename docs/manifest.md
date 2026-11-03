@@ -77,6 +77,9 @@ wall  = 2;   // Wall thickness  (a comment becomes the field's hint)
 /* [Options] */
 light_pipes = true;           // checkbox
 style = "round"; // [round, square]   dropdown
+board = [6, 6, 2.9];          // 2 to 4 numbers: a row of number boxes
+leds  = [[1.3, 17, "PWR"],    // any other list: a text box, checked as you type
+         [1.3, 23, "LNK"]];
 /* [Hidden] */
 eps = 0.01;                   // not shown
 
