@@ -1,6 +1,9 @@
 # Progress
 
 ## Done
+- 2026-11-03: Planned item 10, edit list values in the OpenSCAD panel (spec PR #12, build PR #13, merged). A flat list of 2 to 4 numbers gets a row of number boxes, any other literal list a text box checked as you type; values are parsed, never evaluated.
+- 2026-11-03: Planned item 9, Screenshot button (PR #11, merged).
+- 2026-10-26: Released v0.2.0 (PR #8).
 - 2026-10-26: Fixed a CI failure in the share-link browser tests (branch `fix/share-note-race`): they read the Share link note right after the click, but the note is written only after the async clipboard copy. They now wait for it (`shareNote` helper). Found on the v0.2.0 release PR (#8).
 - 2026-10-26: Fixed the CI failure in the `<mockup-embed>` browser test (branch `fix/embed-test-race`, PR #7): `canvasColours` squashed the wide, short embed canvas to 160×100, leaving the model a few pixels and the count at the threshold (40 on CI, 41 locally). The embed check now counts at the canvas's own size (about 70). A first attempt that polled for 10 s did not help: the model was drawn, the measurement was the problem.
 - 2026-10-24: Planned item 5, simple inline embed (branch `feat/inline-embed`, awaiting review/merge): compact mode (`?embed` with `controls`, `mode`, `view`, `finish`, `theme`), the `snapshot` command, `<mockup-embed>` (lazy start near the viewport, stills, at most 8 live, `load="click"`, `link`, errors in the frame), classic `dist/embed.js` plus `dist/embed.mjs`.
@@ -12,7 +15,7 @@
   - Browser tests: test host on a second local server; URL load, bytes load, controls, Arrange edit → `change`, origin rejection, OpenSCAD values + render.
 
 ## In progress
-- Release v0.2.0 (branch `chore/release-0.2.0`): version bumped in package.json, package-lock.json, README install line and the spec status. After merge: tag `v0.2.0` on main, push tags, republish the two Claude artifacts.
+- Release v0.3.0 (branch `chore/release-0.3.0`): version bumped in package.json, package-lock.json, README install line and the spec status. After merge: tag `v0.3.0` on main, push tags, republish the two Claude artifacts.
 
 ## Next
 - Tracker side (in `ai-project-tracker`, its own backlog): where mockups live and how an item shows one. It has no mockup or file storage yet.
@@ -20,6 +23,7 @@
 - Planned work in docs/SPEC.md section 12, in order (items 1, 3 and 6 remain; numbers are kept stable).
 
 ## Decisions
+- 2026-11-06: Release as v0.3.0 (minor): new features (Screenshot, list values), additive changes only; embedding protocol stays at version 1.
 - 2026-10-26: Release as v0.2.0, not v1.0. The interfaces are not settled yet: this release changes `dist/embed.js` to a classic script, open questions 1 (serve containment) and 2 (copied viewer version) are undecided, and planned items 1 and 3 may change the URL parameters and the editor.
 | Date | Decision | Why |
 | --- | --- | --- |
