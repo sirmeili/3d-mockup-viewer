@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { buildMockup, renderPage, renderPart, toBinaryStl, triangleCount, scadLiteral, classicEmbed } from '../lib/index.js';
+import { execFileSync } from 'node:child_process';
+import { buildMockup, renderPage, renderPart, toBinaryStl, triangleCount, scadLiteral, readScadValue, parseScadValue, classicEmbed } from '../lib/index.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mockup-test-'));
@@ -67,6 +68,63 @@ test('defines become OpenSCAD literals', () => {
   assert.equal(scadLiteral('lid'), '"lid"');
   assert.equal(scadLiteral(true), 'true');
   assert.equal(scadLiteral([1, 2.5, 'a']), '[1, 2.5, "a"]');
+  assert.equal(scadLiteral(null), 'undef');
+  assert.equal(scadLiteral([[1.3, 17, 'PWR'], [null, false]]), '[[1.3, 17, "PWR"], [undef, false]]');
+  assert.equal(scadLiteral('a"b\\c\nd\te\u0001'), '"a\\"b\\\\c\\nd\\te\\x01"');
+});
+
+// the viewer's copy of the OpenSCAD value reader ("OpenSCAD values" in viewer.html), run the same cases as lib/scad.js
+function viewerScadValues() {
+  const src = fs.readFileSync(path.join(ROOT, 'src/viewer.html'), 'utf8');
+  const block = /\/\/ ---------- OpenSCAD values[\s\S]*?(?=\n {2}\/\/ ----------)/.exec(src);
+  assert.ok(block, 'viewer.html has an "OpenSCAD values" section');
+  const ctx = {};
+  vm.runInNewContext(block[0] + '\nthis.out = { readScadValue, parseScadValue, scadLiteral };', ctx);
+  return ctx.out;
+}
+for (const [where, lib] of [['lib/scad.js', { readScadValue, parseScadValue, scadLiteral }], ['viewer.html', null]]) {
+  test(`OpenSCAD values are read without evaluating (${where})`, () => {
+    const { parseScadValue: parse, readScadValue: read, scadLiteral: write } = lib || viewerScadValues();
+    const ok = (text, value) => assert.deepEqual(JSON.parse(JSON.stringify(parse(text))), { value }, text);
+    const bad = (text, error) => { const r = parse(text); assert.ok(r.error, text + ' should not read'); if (error) assert.match(r.error, error, text); };
+    ok('[[1.3, 17.0, "PWR"], [1.3, 23.0, "LNK"]]', [[1.3, 17, 'PWR'], [1.3, 23, 'LNK']]);
+    ok(' [ .5 , -2 , 1e3, +4, 1. ] ', [0.5, -2, 1000, 4, 1]);
+    ok('[true, false, undef, []]', [true, false, null, []]);
+    ok('[\n  [1, 2],\n  [3, 4]\n]', [[1, 2], [3, 4]]);
+    ok('"a;b // c"', 'a;b // c');
+    ok('"q\\"\\\\\\n\\t\\x41\\u263A\\U01F600"', 'q"\\\n\tA☺\u{1F600}');
+    ok('42', 42);
+    ok('undef', null);
+    bad('[1, 2', /Missing \]/);
+    bad('[1, 2,]', /No comma/);
+    bad('[1 2]', /Missing ,/);
+    bad('[0:10]', /Ranges/);
+    bad('[esp_y0 + 52, 10]', /Only numbers/);
+    bad('[1 + 2]', /Only numbers/);
+    bad('[for (i = [0:2]) i]', /Only numbers/);
+    bad('[1, 2] x', /Only numbers/);
+    bad('3mm', /Only numbers/);
+    bad('"open', /Missing closing/);
+    bad('"\\q"', /Unknown escape/);
+    bad('"\\x80"', /Unknown escape/);
+    bad('1e999', /too large/);
+    bad('', /Enter a value/);
+    assert.deepEqual(JSON.parse(JSON.stringify(read('wall = [1, 2], x = 3', 7))), { value: [1, 2], end: 13 });
+    for (const v of [[[1.3, 17, 'PWR'], [null, true]], 'a"b\\c\nd\u0001', [], -0.25, 1e21]) {
+      assert.deepEqual(JSON.parse(JSON.stringify(parse(write(v)).value)), JSON.parse(JSON.stringify(v)), 'round trip ' + JSON.stringify(v));
+    }
+  });
+}
+
+test('mockup render reads -D lists as OpenSCAD literals', () => {
+  const dir = tmp();
+  const f = path.join(dir, 'l.scad'), out = path.join(dir, 'l.stl');
+  fs.writeFileSync(f, 'pts = [[0, 0]];\nfor (p = pts) translate([p[0], p[1], 0]) cube(1);\n');
+  execFileSync(process.execPath, [path.join(ROOT, 'cli/mockup.js'), 'render', f, '-o', out, '-D', 'pts=[[0, 0], [5, .5]]'], { stdio: 'pipe' });
+  const stl = fs.readFileSync(out);
+  let maxX = -Infinity;
+  for (let i = 0, n = stl.readUInt32LE(80); i < n; i++) for (let k = 0; k < 3; k++) maxX = Math.max(maxX, stl.readFloatLE(84 + i * 50 + 12 + k * 12));
+  assert.equal(Math.round(maxX), 6, 'the second cube from the -D list was rendered');
 });
 
 test('ASCII STL converts to binary', () => {

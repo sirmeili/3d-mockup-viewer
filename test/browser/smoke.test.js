@@ -504,7 +504,7 @@ async function checkShared(page, errors, dims, shot, parts = 9) {
   assert.ok(await canvasColours(page) > 40, 'model drawn');
   const ro = await page.evaluate(() => ({
     shown: ['openBox', 'arrBox', 'edBox', 'scadRender', 'scadReset', 'scadShare'].filter((id) => !document.getElementById(id).hidden),
-    locked: Array.from(document.querySelectorAll('#scadParams input, #scadParams select')).every((i) => i.disabled),
+    locked: Array.from(document.querySelectorAll('#scadParams input, #scadParams select, #scadParams textarea')).every((i) => i.disabled),
     meta: document.getElementById('scadMeta').textContent, foot: document.getElementById('foot').textContent
   }));
   assert.deepEqual(ro.shown, [], 'editing controls hidden');
@@ -628,6 +628,124 @@ test('share link: hidden inside a frame; explains mesh parts; falls back when th
     await page.waitForFunction(() => document.querySelectorAll('.pname').length >= 1 && document.getElementById('loading').hidden);
     const msg = await page.evaluate(() => { try { window.mockupViewer.shareLink(); return 'no error'; } catch (e) { return e.message; } });
     assert.match(msg, /only carry OpenSCAD parts; Base is a mesh file/);
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+// ---------- list values in the OpenSCAD panel (test/browser/lists.scad) ----------
+const LISTS_SCAD = fs.readFileSync(path.join(ROOT, 'test', 'browser', 'lists.scad'), 'utf8');
+// load files into a drop-in page as if picked with Load files: {name: text}
+async function loadFiles(page, files) {
+  await page.evaluate((fl) => {
+    const dt = new DataTransfer();
+    for (const [n, t] of Object.entries(fl)) dt.items.add(new File([t], n));
+    const input = document.getElementById('fileInput'); input.files = dt.files; input.dispatchEvent(new Event('change'));
+  }, files);
+}
+const rendered = (page, n) => page.waitForFunction((k) => new RegExp('Rendered ' + k + ' of ' + k + ' parts').test(document.getElementById('scadLog').textContent) && document.getElementById('loading').hidden, n, { timeout: 120000 });
+async function renderAgain(page) {
+  await page.evaluate(() => { document.getElementById('scadLog').textContent = ''; });
+  await page.click('#scadRender');
+  await rendered(page, 1);
+}
+
+for (const [vp, scheme] of [[VIEWPORTS[0], 'light'], [VIEWPORTS[1], 'dark']]) {
+  test(`list values: text boxes, number boxes, checks and Reset (${vp.name}, ${scheme})`, async () => {
+    const { ctx, page, errors } = await newPage(vp, scheme, { permissions: ['clipboard-read', 'clipboard-write'] });
+    let link;
+    try {
+      await page.goto(BASE + 'openscad/viewer.html');
+      await loadFiles(page, { 'lists.scad': LISTS_SCAD });
+      await rendered(page, 1);
+      assert.equal(await page.textContent('#dims'), '26 × 16 × 2.5 mm');
+
+      // which lists became fields, and of which kind
+      const kinds = await page.evaluate(() => {
+        const out = {};
+        document.querySelectorAll('#scadParams .param').forEach((w) => {
+          const f = w.querySelectorAll('input, textarea, select');
+          out[f[0].id.replace(/^sp-/, '')] =f.length > 1 ? 'boxes:' + f.length : f[0].tagName.toLowerCase() + (f[0].type === 'text' ? ':text' : '');
+        });
+        return out;
+      });
+      assert.deepEqual(kinds, { posts: 'textarea', labels: 'textarea', size: 'boxes:3', five: 'textarea', table: 'textarea', note: 'input:text' }, JSON.stringify(kinds));
+      assert.equal(await page.inputValue('#sp-table'), '[\n    [2, 3, "a"],\n    [4, 5, "b;c // d"]\n]', 'a list over several lines, comments dropped');
+      assert.equal(await page.inputValue('#sp-note'), 'semi; colon // not a comment', 'a ; and // inside a string');
+      assert.deepEqual(await page.evaluate(() => ['min', 'max', 'step'].map((a) => document.getElementById('sp-size-2').getAttribute(a))), ['1', '30', '0.5'], 'the range hint applies to every box');
+      assert.match(await page.textContent('#sp-posts >> xpath=..'), /corner posts, x and y/, 'the comment above is the hint');
+      assert.doesNotMatch(await page.textContent('#sp-five >> xpath=..'), /\[a, b\]/, 'a dropdown hint on a list is ignored');
+
+      // reformatting isn't a change; a real edit is
+      await page.fill('#sp-posts', '[ [0,0],\n  [20, 0.0], [0,12] ]');
+      assert.equal(await page.locator('.param.changed').count(), 0, 'whitespace and 0.0 are not changes');
+      assert.doesNotMatch(await page.textContent('#scadCount'), /changed/);
+      await page.fill('#sp-posts', '[[0, 0], [40, 0], [0, 12]]');
+      await page.fill('#sp-size-1', '8');
+      assert.match(await page.textContent('#scadCount'), /2 changed/);
+      await renderAgain(page);
+      assert.equal(await page.textContent('#dims'), '46 × 20 × 2.5 mm', 'the edited lists reach OpenSCAD');
+
+      // text that can't be read stops Render and Share link until it is fixed
+      await page.fill('#sp-labels', '["PWR", LNK]');
+      assert.match(await page.textContent('#sp-labels-err'), /Only numbers, "text", true, false, undef and \[lists\] here/);
+      await page.fill('#sp-labels', '["PWR", "LNK"');
+      assert.equal(await page.textContent('#sp-labels-err'), 'Missing ].');
+      assert.ok(await page.locator('.param.bad').count() === 1 && await page.isDisabled('#scadRender') && await page.isDisabled('#scadShare'));
+      assert.match(await page.textContent('#scadBlock'), /^Fix Labels to render: Missing \]\.$/);
+      assert.match(await page.evaluate(() => { try { window.mockupViewer.shareLink(); return ''; } catch (e) { return e.message; } }), /Fix Labels first/);
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      assert.ok(over <= 1, `page scrolls sideways by ${over}px`);
+      await page.locator('#scadPanel').screenshot({ path: path.join(SHOTS, `lists-panel-${vp.name}-${scheme}.png`) });
+      await page.fill('#sp-labels', '["PWR", "LNK"]');
+      assert.ok(await page.isEnabled('#scadRender') && await page.isHidden('#scadBlock'), 'fixed text clears it');
+
+      if (vp.name === 'desktop') link = await page.evaluate(() => window.mockupViewer.shareLink().link);
+      await page.fill('#sp-labels', '[');
+      await page.click('#scadReset');
+      assert.ok(await page.isEnabled('#scadRender') && await page.locator('.param.bad, .param.changed').count() === 0, 'Reset clears bad text and edits');
+      assert.equal(await page.inputValue('#sp-posts'), '[[0, 0], [20, 0], [0, 12]]');
+      assert.deepEqual(errors, [], 'no page or console errors');
+    } finally {
+      await ctx.close();
+    }
+    if (!link) return;
+    // a share link carries list values as arrays, and opening it applies them
+    const p = decodeShare(link.split('#m=')[1]);
+    assert.deepEqual(p.values, { posts: [[0, 0], [40, 0], [0, 12]], size: [6, 8, 2.5] });
+    const opened = await newPage(vp, scheme);
+    try {
+      await opened.page.goto(link);
+      await partsShown(opened.page, 1, 120000);
+      assert.equal(await opened.page.textContent('#dims'), '46 × 20 × 2.5 mm');
+      assert.equal(await opened.page.inputValue('#sp-posts'), '[[0, 0], [40, 0], [0, 12]]');
+      assert.equal(await opened.page.inputValue('#sp-size-1'), '8');
+      assert.ok(await opened.page.isDisabled('#sp-posts') && await opened.page.isDisabled('#sp-size-1'), 'locked on a shared mockup');
+      assert.deepEqual(opened.errors, [], 'no page or console errors');
+    } finally {
+      await opened.ctx.close();
+    }
+  });
+}
+
+test('list values: a manifest part\'s nested-list defines render, and the editor reads them', async () => {
+  const { ctx, page, errors } = await newPage(VIEWPORTS[0], 'light');
+  try {
+    const manifest = { name: 'Lists', parts: [{ id: 'posts', name: 'Posts', scad: { file: 'lists.scad', defines: { posts: [[0, 0], [30, 0]] } } }] };
+    await page.goto(BASE + 'openscad/viewer.html');
+    await loadFiles(page, { 'lists.scad': LISTS_SCAD, 'manifest.json': JSON.stringify(manifest) });
+    await rendered(page, 1);
+    assert.equal(await page.textContent('#dims'), '36 × 4.0 × 2.5 mm', 'the define reached OpenSCAD as a list');
+    await page.click('#edOpen');
+    await page.click('#ed-nav-parts');
+    await page.click('#ed-part-edit-posts');
+    assert.equal(await page.inputValue('#ed-part-defs-posts'), 'posts = [[0, 0], [30, 0]]');
+    await page.fill('#ed-part-defs-posts', 'posts = [[0, 0], [10, 0]], size = [2, 2, 2], name = lid, gone = undef');
+    assert.equal(await page.textContent('#ed-part-err-posts'), '', 'nested lists, a bare word and undef read');
+    await page.fill('#ed-part-defs-posts', 'posts = [[0, 0], [10, 0]');
+    assert.match(await page.textContent('#ed-part-err-posts'), /Write defines as name = value/);
+    await page.click('#edDone');
     assert.deepEqual(errors, [], 'no page or console errors');
   } finally {
     await ctx.close();
@@ -1015,6 +1133,29 @@ test('embed: OpenSCAD edition takes values from the host and re-renders', async 
     assert.equal(res.parts, 9);
     assert.deepEqual(res.warnings, []);
     assert.match(await frame().locator('#scadLog').textContent(), /Rendered 9 of 9 parts/);
+    assert.deepEqual(errors, [], 'no page or console errors');
+  } finally {
+    await ctx.close();
+  }
+});
+
+test('embed: OpenSCAD list values from the host', async () => {
+  const { ctx, page, errors, frame } = await openHost('openscad/viewer.html');
+  try {
+    await page.evaluate(() => viewer.ready);
+    assert.equal((await page.evaluate((src) => viewer.load({ manifest: null, files: { 'lists.scad': new TextEncoder().encode(src).buffer } }), LISTS_SCAD)).parts, 1);
+    const set = await page.evaluate(() => viewer.scad.setValues({ posts: [[0, 0], [50, 0]], size: [5, 5, 1], labels: ['A', null] }));
+    assert.deepEqual([set.values.posts, set.values.size, set.values.labels], [[[0, 0], [50, 0]], [5, 5, 1], ['A', null]]);
+    assert.equal(await frame().inputValue('#sp-posts'), '[[0, 0], [50, 0]]');
+    assert.equal(await frame().inputValue('#sp-labels'), '["A", undef]');
+    assert.equal(await frame().inputValue('#sp-size-2'), '1');
+    const bad = await page.evaluate(() => viewer.scad.setValues({ size: [1, 2], posts: 5, five: [1, {}] }).then(() => null, (e) => e.code + ': ' + e.message));
+    assert.match(bad, /^bad-values: .*size \(expects a list of 3 numbers\).*posts \(expects a list\).*five \(expects a list\)/);
+    assert.equal(await frame().inputValue('#sp-size-2'), '1', 'a rejected update changes nothing');
+    assert.equal((await page.evaluate(() => viewer.scad.render())).size.join(' '), '55 5 1');
+    // text a viewer can't read stops the host's render too
+    await frame().fill('#sp-posts', '[[0, 0]');
+    assert.match(await page.evaluate(() => viewer.scad.render().then(() => null, (e) => e.code + ': ' + e.message)), /^bad-values: posts can’t be read: Missing \]\.$/);
     assert.deepEqual(errors, [], 'no page or console errors');
   } finally {
     await ctx.close();

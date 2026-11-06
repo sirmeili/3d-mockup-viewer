@@ -31,11 +31,20 @@
 .param > label { font-size: 13.5px; display: flex; justify-content: space-between; gap: 8px; }
 .param > label code { font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .param small { color: var(--muted); font-size: 12px; line-height: 1.35; }
-.param input[type="number"], .param input[type="text"], .param select {
+.param input[type="number"], .param input[type="text"], .param select, .param textarea {
   font: 400 13.5px/1.2 var(--font-mono); color: var(--fg); background: var(--bg);
   border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; width: 100%; min-width: 0;
 }
-.param.changed input, .param.changed select { border-color: var(--accent); }
+.param.changed input, .param.changed select, .param.changed textarea { border-color: var(--accent); }
+.param.wide { grid-column: 1 / -1; }
+.pvec { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 6px; }
+.param textarea.plist { line-height: 1.4; resize: vertical; field-sizing: content; min-height: 2.3em; max-height: 60vh; white-space: pre-wrap; overflow-wrap: anywhere; }
+.param textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.param.bad textarea, .param.bad.changed textarea { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+.param.bad textarea:focus-visible { outline-color: var(--warn); }
+.param small.perr { color: var(--warn); }
+.param small.perr[hidden] { display: none; }
+.scad-block { margin: 6px 0 0; color: var(--warn); font-size: 13.5px; overflow-wrap: anywhere; }
 .param .chk { display: inline-flex; align-items: center; gap: 8px; font: 400 13.5px var(--font-mono); padding: 6px 0; }
 .param .chk input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
 .params-empty { margin: 0; color: var(--muted); font-size: 13.5px; }
@@ -53,6 +62,7 @@
     <div>
       <h2>OpenSCAD</h2>
       <p class="scad-meta" id="scadMeta"></p>
+      <p class="scad-block" id="scadBlock" role="status" hidden></p>
     </div>
     <div class="scad-actions">
       <button class="btn" type="button" id="scadShare" hidden>Share link</button>
@@ -87,53 +97,120 @@
   const S = { sources: {}, main: null, manifest: null, partVar: null, partValues: [], params: [], rendering: false, rendered: false, readOnly: false };
 
   // ---------- parsing ----------
-  const NUM = /^-?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
+  const V = () => window.mockupViewer;
+  // a line's code and trailing comment, split outside strings; depth is how many brackets it leaves open
+  function scanLine(line) {
+    let depth = 0, inStr = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === '/' && line[i + 1] === '/') return { code: line.slice(0, i), comment: line.slice(i + 2).trim(), depth };
+      else if ('([{'.includes(c)) depth++;
+      else if (')]}'.includes(c)) depth--;
+    }
+    return { code: line, comment: '', depth };
+  }
+  // split on ; outside strings and brackets
+  function statements(code) {
+    const out = []; let depth = 0, inStr = false, start = 0;
+    for (let i = 0; i < code.length; i++) {
+      const c = code[i];
+      if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if ('([{'.includes(c)) depth++;
+      else if (')]}'.includes(c)) depth--;
+      else if (c === ';' && !depth) { out.push(code.slice(start, i)); start = i + 1; }
+    }
+    out.push(code.slice(start));
+    return out.map((x) => x.trim()).filter(Boolean);
+  }
+  // the editable kind of a literal value: a flat list of 2 to 4 numbers gets number boxes, other lists a text box
+  function kindOf(v) {
+    if (typeof v === 'number') return 'number';
+    if (typeof v === 'boolean') return 'bool';
+    if (typeof v === 'string') return 'string';
+    if (!Array.isArray(v)) return null;
+    return v.length >= 2 && v.length <= 4 && v.every((x) => typeof x === 'number') ? 'vector' : 'list';
+  }
   function parseParams(src) {
     const out = []; let section = null, hidden = false, prev = null;
-    for (const line of src.split(/\r?\n/)) {
-      const t = line.trim();
+    const lines = src.split(/\r?\n/);
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li], t = line.trim();
       if (/^(module|function)\b/.test(t)) break;
       const sec = /^\/\*\s*\[([^\]]+)\]\s*\*\/$/.exec(t);
       if (sec) { section = sec[1].trim(); hidden = /^hidden$/i.test(section); prev = null; continue; }
       if (t.startsWith('//')) { prev = t.replace(/^\/\/+\s*/, ''); continue; }
       if (/^\s/.test(line) || !/^[A-Za-z_$][\w$]*\s*=/.test(t)) { prev = null; continue; }
-      const ci = t.indexOf('//');
-      const code = ci >= 0 ? t.slice(0, ci) : t;
-      const hint = ci >= 0 ? t.slice(ci + 2).trim() : '';
-      const segs = code.split(';').map((x) => x.trim()).filter(Boolean);
+      // an assignment continues on the following lines while its brackets are open; comments inside are dropped
+      const first = scanLine(t);
+      let depth = first.depth, hint = first.comment;
+      const more = [];
+      while (depth > 0 && li + 1 < lines.length) {
+        const next = scanLine(lines[++li].replace(/\s+$/, ''));
+        if (next.code.trim()) more.push(next.code.replace(/\s+$/, ''));
+        depth += next.depth; hint = next.comment;
+      }
+      if (depth > 0 || hidden) { prev = null; continue; }
+      const indent = Math.min(...more.map((l) => /^\s*/.exec(l)[0].length));
+      const code = [first.code.trim()].concat(more.map((l) => l.slice(indent))).join('\n');
       const found = [];
       let ok = true;
-      for (const seg of segs) {
-        const m = /^([A-Za-z_$][\w$]*)\s*=\s*(.+)$/.exec(seg);
+      for (const seg of statements(code)) {
+        const m = /^([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(seg);
         if (!m) { ok = false; break; }
         const raw = m[2].trim();
-        let type = null, value = null;
-        if (NUM.test(raw)) { type = 'number'; value = parseFloat(raw); }
-        else if (raw === 'true' || raw === 'false') { type = 'bool'; value = raw === 'true'; }
-        else if (/^"([^"\\]|\\.)*"$/.test(raw)) { type = 'string'; value = JSON.parse(raw); }
-        if (type) found.push({ name: m[1], type, value });
+        const r = V().parseScadValue(raw);
+        const type = r.error ? null : kindOf(r.value);
+        if (type) found.push({ name: m[1], type, value: r.value, text: raw });
       }
-      if (!ok || hidden) { prev = null; continue; }
+      if (!ok) { prev = null; continue; }
       found.forEach((f, i) => {
         const p = { name: f.name, type: f.type, value: f.value, def: f.value, section, desc: found.length === 1 ? prev : null };
+        if (p.type === 'list') { p.text = p.defText = f.text; p.error = null; }
         const h = found.length === 1 ? hint : '';
         const rng = /^\[\s*(-?[\d.]+)\s*:\s*(-?[\d.]+)\s*(?::\s*(-?[\d.]+))?\s*\]$/.exec(h);
-        if (rng && p.type === 'number') {
+        if (rng && (p.type === 'number' || p.type === 'vector')) {
           if (rng[3] !== undefined) { p.min = +rng[1]; p.step = +rng[2]; p.max = +rng[3]; } else { p.min = +rng[1]; p.max = +rng[2]; }
-        } else if (/^\[.+\]$/.test(h) && p.type !== 'bool') {
-          p.options = h.slice(1, -1).split(',').map((x) => x.trim()).filter(Boolean).map((x) => {
-            const [v, lab] = x.split(':').map((y) => y.trim().replace(/^"|"$/g, ''));
-            return { value: p.type === 'number' ? parseFloat(v) : v, label: lab || v };
-          });
+        } else if (/^\[.+\]$/.test(h)) {
+          // a dropdown; lists have none, and the hint isn't shown for them either
+          if (p.type === 'number' || p.type === 'string') {
+            p.options = h.slice(1, -1).split(',').map((x) => x.trim()).filter(Boolean).map((x) => {
+              const [v, lab] = x.split(':').map((y) => y.trim().replace(/^"|"$/g, ''));
+              return { value: p.type === 'number' ? parseFloat(v) : v, label: lab || v };
+            });
+          }
         } else if (h && !p.desc) p.desc = h;
         if (found.length > 1 && hint && i === 0) p.desc = hint;
-        if (p.type === 'number' && p.step === undefined) p.step = Number.isInteger(p.value) ? 1 : 0.1;
+        if (p.step === undefined && p.type === 'number') p.step = Number.isInteger(p.value) ? 1 : 0.1;
+        if (p.step === undefined && p.type === 'vector') p.step = p.value.every(Number.isInteger) ? 1 : 0.1;
         out.push(p);
       });
       prev = null;
     }
     return out;
   }
+  // compared as OpenSCAD reads them, so whitespace and 17.0 against 17 aren't changes
+  const changed = (p) => V().scadLiteral(p.value) !== V().scadLiteral(p.def);
+  // a value from a share link or the embedding API that fits a field
+  function fits(p, v) {
+    const lit = (x) => x === null || typeof x === 'boolean' || typeof x === 'string' || (typeof x === 'number' && Number.isFinite(x)) || (Array.isArray(x) && x.every(lit));
+    if (p.type === 'number') return typeof v === 'number' && Number.isFinite(v);
+    if (p.type === 'bool') return typeof v === 'boolean';
+    if (p.type === 'string') return typeof v === 'string';
+    if (p.type === 'vector') return Array.isArray(v) && v.length === p.def.length && v.every((x) => typeof x === 'number' && Number.isFinite(x));
+    return Array.isArray(v) && lit(v);
+  }
+  function expects(p) {
+    return p.type === 'bool' ? 'a boolean' : p.type === 'vector' ? 'a list of ' + p.def.length + ' numbers' : p.type === 'list' ? 'a list' : 'a ' + p.type;
+  }
+  // a value set from outside the panel; list fields show it written out
+  function setValue(p, v) {
+    p.value = Array.isArray(v) ? JSON.parse(JSON.stringify(v)) : v;
+    if (p.type === 'list') { p.text = V().scadLiteral(p.value); p.error = null; }
+  }
+  const blocker = () => S.params.find((p) => p.error && p.name !== S.partVar);
   function detectPartVar(src) {
     const re = /\b([A-Za-z_]\w*)\s*==\s*"([^"]+)"/g; const seen = {}; let m;
     while ((m = re.exec(src))) {
@@ -172,7 +249,8 @@
   }
   const pretty = (s) => s.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim().replace(/^./, (c) => c.toUpperCase());
   const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'part';
-  function literal(p, v) { return p.type === 'string' ? JSON.stringify(String(v)) : p.type === 'bool' ? (v ? 'true' : 'false') : String(v); }
+  const SPECIAL = { '$fn': 'Smoothness', '$fa': 'Min. facet angle', '$fs': 'Min. facet size' };
+  const labelOf = (p) => SPECIAL[p.name] || pretty(p.name.replace(/^\$/, ''));
 
   // ---------- params panel ----------
   function renderPanel() {
@@ -194,7 +272,7 @@
     updateCount();
     if (!params.length) {
       const e = document.createElement('p'); e.className = 'params-empty';
-      e.textContent = 'No editable top-level values found. Plain number, true/false and "text" assignments above the first module become editable here.';
+      e.textContent = 'No editable top-level values found. Plain number, true/false, "text" and [list] assignments above the first module become editable here.';
       host.appendChild(e); return;
     }
     const sections = new Map();
@@ -211,10 +289,19 @@
   }
   function updateCount() {
     const params = S.params.filter((p) => p.name !== S.partVar);
-    const changed = params.filter((p) => p.value !== p.def).length;
+    const count = params.filter(changed).length;
     const el = $('scadCount'); el.textContent = '';
     el.append(params.length + (params.length === 1 ? ' value' : ' values'));
-    if (changed) { el.append(' · '); const b = document.createElement('b'); b.textContent = changed + ' changed'; el.append(b); }
+    if (count) { el.append(' · '); const b = document.createElement('b'); b.textContent = count + ' changed'; el.append(b); }
+    updateBlocked();
+  }
+  // a list field that can't be read stops Render and Share link until it is fixed or reset
+  function updateBlocked() {
+    const b = blocker(), note = $('scadBlock');
+    note.hidden = !b;
+    note.textContent = b ? 'Fix ' + labelOf(b) + ' to render: ' + b.error : '';
+    $('scadRender').disabled = S.rendering || !!b;
+    $('scadShare').disabled = !!b;
   }
   // per-viewer memory of which sections are open
   function key(k) { return 'scadOpen:' + (S.main || '') + ':' + k; }
@@ -224,14 +311,54 @@
     const wrap = document.createElement('div'); wrap.className = 'param';
     const id = 'sp-' + p.name.replace(/\$/g, 'S');
     const lab = document.createElement('label'); lab.htmlFor = id;
-    const SPECIAL = { '$fn': 'Smoothness', '$fa': 'Min. facet angle', '$fs': 'Min. facet size' };
-    const nm = document.createElement('span'); nm.textContent = SPECIAL[p.name] || pretty(p.name.replace(/^\$/, ''));
+    const nm = document.createElement('span'); nm.textContent = labelOf(p);
     lab.append(nm);
     if (nm.textContent.toLowerCase().replace(/ /g, '_') !== p.name.toLowerCase()) { const raw = document.createElement('code'); raw.textContent = p.name; lab.append(raw); }
     let input;
-    const lock = () => { input.disabled = S.readOnly; };
-    const mark = () => { wrap.classList.toggle('changed', p.value !== p.def); updateCount(); };
-    if (p.type === 'bool') {
+    const lock = () => { [].concat(input).forEach((x) => { x.disabled = S.readOnly; }); };
+    const mark = () => { wrap.classList.toggle('changed', changed(p)); updateCount(); };
+    const enter = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); render(); } };
+    if (p.type === 'vector') {
+      // one number box per item; the count is fixed
+      const row = document.createElement('div'); row.className = 'pvec';
+      row.style.setProperty('--n', String(p.def.length));
+      input = p.def.map((_, k) => {
+        const b = document.createElement('input'); b.type = 'number'; b.id = k ? id + '-' + k : id; b.inputMode = 'decimal';
+        b.step = String(p.step); if (p.min !== undefined) b.min = String(p.min); if (p.max !== undefined) b.max = String(p.max);
+        b.setAttribute('aria-label', labelOf(p) + ', ' + (k + 1) + ' of ' + p.def.length);
+        b.value = String(p.value[k]);
+        b.addEventListener('input', () => { const v = parseFloat(b.value); if (!Number.isNaN(v)) { p.value = p.value.slice(); p.value[k] = v; } mark(); });
+        b.addEventListener('keydown', enter);
+        return b;
+      });
+      row.append(...input);
+      wrap.append(lab, row);
+    } else if (p.type === 'list') {
+      // the list as text; it has to read as a literal list before it is used
+      wrap.classList.add('wide');
+      input = document.createElement('textarea'); input.id = id; input.className = 'plist'; input.spellcheck = false;
+      input.rows = Math.max(1, p.text.split('\n').length); input.value = p.text;
+      const err = document.createElement('small'); err.className = 'perr'; err.id = id + '-err';
+      const showErr = () => {
+        err.textContent = p.error || ''; err.hidden = !p.error;
+        wrap.classList.toggle('bad', !!p.error);
+        if (p.error) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+      };
+      // grow with the text where the browser can't size the box to its content
+      const fit = () => { if (!input.offsetParent || CSS.supports('field-sizing', 'content')) return; input.style.height = 'auto'; input.style.height = input.scrollHeight + 2 + 'px'; };
+      input.setAttribute('aria-describedby', err.id);
+      input.addEventListener('input', () => {
+        p.text = input.value;
+        const r = V().parseScadValue(input.value);
+        p.error = r.error || (Array.isArray(r.value) ? null : 'Keep this a [list].');
+        if (!p.error) p.value = r.value;
+        showErr(); mark(); fit();
+      });
+      input.addEventListener('keydown', enter);
+      if (window.ResizeObserver) new ResizeObserver(fit).observe(input);
+      showErr();
+      wrap.append(lab, input, err);
+    } else if (p.type === 'bool') {
       const box = document.createElement('label'); box.className = 'chk';
       input = document.createElement('input'); input.type = 'checkbox'; input.id = id; input.checked = p.value;
       input.addEventListener('change', () => { p.value = input.checked; mark(); });
@@ -252,7 +379,7 @@
         if (p.type === 'number') { const v = parseFloat(input.value); if (!Number.isNaN(v)) p.value = v; } else p.value = input.value;
         mark();
       });
-      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') render(); });
+      input.addEventListener('keydown', enter);
       wrap.append(lab, input);
     }
     lock();
@@ -260,7 +387,10 @@
     mark();
     return wrap;
   }
-  $('scadReset').addEventListener('click', () => { S.params.forEach((p) => { p.value = p.def; }); renderPanel(); });
+  $('scadReset').addEventListener('click', () => {
+    S.params.forEach((p) => { p.value = p.def; if (p.type === 'list') { p.text = p.defText; p.error = null; } });
+    renderPanel();
+  });
   // Share link: the viewer packs the current manifest with shareData() into a link; copy it, or show it to copy by hand
   $('scadShare').addEventListener('click', async () => {
     const note = $('scadShareNote'), box = $('scadShareText');
@@ -345,7 +475,7 @@
   }
   function overrides() {
     const d = {};
-    S.params.forEach((p) => { if (p.name !== S.partVar && p.value !== p.def) d[p.name] = literal(p, p.value); });
+    S.params.forEach((p) => { if (p.name !== S.partVar && changed(p)) d[p.name] = V().scadLiteral(p.value); });
     return d;
   }
   function planParts() {
@@ -355,17 +485,17 @@
     if (mf && mf.parts && mf.parts.some((p) => p.scad)) {
       return mf.parts.filter((p) => p.scad && !p.omit).map((p) => {
         const defs = Object.assign({}, ov);
-        Object.entries(p.scad.defines || {}).forEach(([k, v]) => { defs[k] = typeof v === 'string' ? JSON.stringify(v) : String(v); });
+        Object.entries(p.scad.defines || {}).forEach(([k, v]) => { defs[k] = V().scadLiteral(v); });
         return { id: p.id || slug(p.name), name: p.name, scad: { file: srcPath(p.scad.file || S.main), defines: Object.assign({}, p.scad.defines || {}) }, job: { files, main: srcPath(p.scad.file || S.main), defines: defs } };
       });
     }
     if (S.partVar) {
-      return S.partValues.map((v) => ({ id: slug(v), name: pretty(v), scad: { file: S.main, defines: { [S.partVar]: v } }, job: { files, main: S.main, defines: Object.assign({}, ov, { [S.partVar]: JSON.stringify(v) }) } }));
+      return S.partValues.map((v) => ({ id: slug(v), name: pretty(v), scad: { file: S.main, defines: { [S.partVar]: v } }, job: { files, main: S.main, defines: Object.assign({}, ov, { [S.partVar]: V().scadLiteral(v) }) } }));
     }
     return [{ id: slug(S.main), name: pretty(S.main), scad: { file: S.main, defines: {} }, job: { files, main: S.main, defines: ov } }];
   }
   async function render() {
-    if (S.rendering || !S.main) return;
+    if (S.rendering || !S.main || blocker()) return;
     S.rendering = true;
     const btn = $('scadRender'); btn.disabled = true; btn.textContent = 'Rendering…';
     const V = window.mockupViewer;
@@ -426,7 +556,7 @@
       V.setLoading('Could not start OpenSCAD: ' + (e && e.message ? e.message : e));
       logEl.textContent = logLines.join('\n') + '\n' + String(e && e.stack || e);
     } finally {
-      S.rendering = false; btn.disabled = false; btn.textContent = 'Render';
+      S.rendering = false; btn.textContent = 'Render'; updateBlocked();
     }
   }
 
@@ -467,18 +597,21 @@
         const p = S.params.find((q) => q.name === name && q.name !== S.partVar);
         const v = values[name];
         if (!p) { bad.push(name + ' (no such value)'); return null; }
-        const ok = p.type === 'number' ? typeof v === 'number' && Number.isFinite(v) : p.type === 'bool' ? typeof v === 'boolean' : typeof v === 'string';
-        if (!ok) bad.push(name + ' (expects a ' + (p.type === 'bool' ? 'boolean' : p.type) + ')');
+        if (!fits(p, v)) bad.push(name + ' (expects ' + expects(p) + ')');
         return [p, v];
       });
       if (bad.length) throw fail('bad-values', 'Could not set ' + bad.join(', ') + '.');
-      updates.forEach(([p, v]) => { p.value = v; });
+      updates.forEach(([p, v]) => setValue(p, v));
       renderPanel();
       const out = {};
       S.params.forEach((p) => { if (p.name !== S.partVar) out[p.name] = p.value; });
       return { values: out };
     },
-    render() { return render(); },
+    render() {
+      const b = blocker();
+      if (b) return Promise.reject(Object.assign(new Error(b.name + ' can’t be read: ' + b.error), { code: 'bad-values' }));
+      return render();
+    },
     // share links: the text sources the manifest's parts reach (include, use, import), and the changed values.
     // Throws with a message for people when something can't go in a link.
     shareData(mf) {
@@ -502,7 +635,9 @@
         });
       }
       const values = {};
-      S.params.forEach((p) => { if (p.name !== S.partVar && p.value !== p.def) values[p.name] = p.value; });
+      const b = blocker();
+      if (b) throw new Error('Fix ' + labelOf(b) + ' first: ' + b.error);
+      S.params.forEach((p) => { if (p.name !== S.partVar && changed(p)) values[p.name] = p.value; });
       return { main: S.main, sources, values };
     },
     // embedded sample: STLs are already baked in, so show the parameters without rendering
@@ -527,8 +662,8 @@
       S.rendered = false;
       setup(sources, main, useManifest);
       const values = opts.values || {};
-      const set = S.params.filter((q) => q.name !== S.partVar && Object.prototype.hasOwnProperty.call(values, q.name) && typeof values[q.name] === typeof q.def);
-      set.forEach((q) => { q.value = values[q.name]; });
+      const set = S.params.filter((q) => q.name !== S.partVar && Object.prototype.hasOwnProperty.call(values, q.name) && fits(q, values[q.name]));
+      set.forEach((q) => setValue(q, values[q.name]));
       if (set.length) renderPanel();
       await render();
     }

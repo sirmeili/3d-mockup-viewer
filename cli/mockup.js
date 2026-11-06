@@ -5,7 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildMockup, renderPage } from '../lib/build.js';
-import { renderPart } from '../lib/scad.js';
+import { renderPart, parseScadValue } from '../lib/scad.js';
 import { writeOpenscadEdition } from '../lib/edition.js';
 import { gatherShare, shareLink, DEFAULT_SHARE_BASE, SHARE_NOTE_LENGTH, SHARE_MAX_LENGTH } from '../lib/share.js';
 
@@ -74,6 +74,9 @@ function parseDefine(d) {
   const i = d.indexOf('=');
   if (i < 0) throw new Error(`-D expects name=value, got "${d}"`);
   const k = d.slice(0, i), raw = d.slice(i + 1);
+  // an OpenSCAD literal ([[1, 2], [3, 4]], .5, undef), else JSON, else text
+  const lit = parseScadValue(raw);
+  if (!lit.error) return [k, lit.value];
   try { return [k, JSON.parse(raw)]; } catch { return [k, raw]; }
 }
 
